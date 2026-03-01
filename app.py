@@ -125,7 +125,7 @@ def guardar_perfil():
     username = session["username"]
     data = request.json or {}
     users = load_users()
-    for campo in ["nombre", "whatsapp", "logo", "form_url", "netlify_token"]:
+    for campo in ["nombre", "whatsapp", "form_url", "netlify_token"]:
         if campo in data:
             users[username][campo] = data[campo]
     save_users(users)
@@ -235,7 +235,6 @@ def generar():
 
     nombre   = data.get("nombre", user.get("nombre", "")).strip()
     whatsapp = data.get("whatsapp", user.get("whatsapp", "")).strip()
-    logo     = data.get("logo", user.get("logo", "")).strip()
     form_url = data.get("form_url", user.get("form_url", "")).strip()
     netlify  = data.get("netlify_token", user.get("netlify_token", "")).strip()
 
@@ -245,7 +244,7 @@ def generar():
 
     threading.Thread(
         target=_run_scraping,
-        args=(job_id, url_prop, nombre, whatsapp, logo, form_url, netlify),
+        args=(job_id, url_prop, nombre, whatsapp, form_url, netlify),
         daemon=True,
     ).start()
 
@@ -280,18 +279,18 @@ def stream(job_id):
 
 # ─── Scraping ─────────────────────────────────────────────────────────────────
 
-def _run_scraping(job_id, url, nombre, whatsapp, logo, form_url, netlify_token):
+def _run_scraping(job_id, url, nombre, whatsapp, form_url, netlify_token):
     job = JOBS[job_id]
     q   = job["queue"]
     try:
-        asyncio.run(_scraping_async(q, job_id, url, nombre, whatsapp, logo, form_url, netlify_token))
+        asyncio.run(_scraping_async(q, job_id, url, nombre, whatsapp, form_url, netlify_token))
     except Exception as e:
         q.put(f"❌ Error: {e}")
         job["status"] = "error"
         q.put("__ERROR__")
 
 
-async def _scraping_async(q, job_id, url_propiedad, tu_nombre, tu_whatsapp, url_logo, form_url, netlify_token):
+async def _scraping_async(q, job_id, url_propiedad, tu_nombre, tu_whatsapp, form_url, netlify_token):
     from playwright.async_api import async_playwright
     job = JOBS[job_id]
 
@@ -299,23 +298,41 @@ async def _scraping_async(q, job_id, url_propiedad, tu_nombre, tu_whatsapp, url_
 
     log("🚀 Iniciando robot...")
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        context = await browser.new_context(viewport={"width": 1920, "height": 1080})
-        page    = await context.new_page()
+        browser = await p.chromium.launch(
+            headless=True,
+            args=["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage",
+                  "--disable-blink-features=AutomationControlled"]
+        )
+        context = await browser.new_context(
+            viewport={"width": 1920, "height": 1080},
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        )
+        page = await context.new_page()
 
-        log(f"🌐 Abriendo página...")
+        log("🌐 Abriendo página...")
         await page.goto(url_propiedad, wait_until="domcontentloaded", timeout=60000)
-        await asyncio.sleep(3)
+        await asyncio.sleep(4)
 
-        log("📸 Buscando galería de fotos...")
-        for sel in ['button:has-text("fotos")', 'button:has-text("Fotos")',
-                    '[data-qa*="gallery"]', '[data-qa*="GALLERY"]',
-                    '[class*="gallery"] button', '[class*="photo-count"]']:
+        # Scroll para disparar lazy loading
+        log("📸 Cargando imágenes...")
+        await page.evaluate("window.scrollTo(0, document.body.scrollHeight * 0.3)")
+        await asyncio.sleep(1)
+        await page.evaluate("window.scrollTo(0, document.body.scrollHeight * 0.6)")
+        await asyncio.sleep(1)
+        await page.evaluate("window.scrollTo(0, 0)")
+        await asyncio.sleep(1)
+
+        # Intentar abrir galería
+        for sel in ['[data-qa="POSTING_GALLERY"]','[data-qa*="gallery"]','[data-qa*="GALLERY"]',
+                    'button:has-text("fotos")','button:has-text("Fotos")','button:has-text("Ver fotos")',
+                    '[class*="gallery"] button','[class*="Gallery"] button','[class*="photo-count"]',
+                    '[class*="photoCount"]','[class*="PhotoGallery"]']:
             try:
-                await page.wait_for_selector(sel, timeout=2000)
-                await page.locator(sel).first.click()
-                await asyncio.sleep(2)
-                break
+                el = page.locator(sel).first
+                if await el.is_visible(timeout=1500):
+                    await el.click()
+                    await asyncio.sleep(2)
+                    break
             except: continue
 
         titulo = precio = ubicacion = descripcion = "—"
@@ -432,7 +449,7 @@ async def _scraping_async(q, job_id, url_propiedad, tu_nombre, tu_whatsapp, url_
         log("🎨 Generando ficha HTML...")
         html = generar_html(titulo, precio, ubicacion, descripcion, fotos[:20],
                             detalles, caracteristicas, info_adicional,
-                            tu_nombre, tu_whatsapp, url_logo, form_url)
+                            tu_nombre, tu_whatsapp, form_url)
 
         if netlify_token:
             log("☁️  Subiendo a Netlify...")
@@ -493,11 +510,11 @@ def subir_a_netlify(html_bytes, token, nombre_sitio=""):
 
 # ─── Generador HTML de la ficha ───────────────────────────────────────────────
 
-def generar_html(titulo, precio, ubicacion, descripcion, fotos, detalles, caracteristicas, info_adicional, nombre_agente, whatsapp, url_logo, form_url=""):
+def generar_html(titulo, precio, ubicacion, descripcion, fotos, detalles, caracteristicas, info_adicional, nombre_agente, whatsapp, form_url=""):
     def esc(t):
         if t is None: return ""
         return str(t).replace("&","&amp;").replace("<","&lt;").replace(">","&gt;").replace('"',"&quot;").replace("'","&#39;")
-    logo_fallback = url_logo or "https://w7.pngwing.com/pngs/402/497/png-transparent-re-max-llc-estate-agent-re-max-alliance-pender-real-estate-house-house-balloon-logo-property.png"
+    logo_fallback = "https://w7.pngwing.com/pngs/402/497/png-transparent-re-max-llc-estate-agent-re-max-alliance-pender-real-estate-house-house-balloon-logo-property.png"
     while len(fotos) < 3: fotos.append(logo_fallback)
     todas_fotos = "".join(f'<div id="foto-{i}" class="mb-3"><img src="{f}" class="w-full h-auto rounded-xl shadow-lg cursor-pointer hover:opacity-90 transition-all" onclick="window.open(this.src,\'_blank\')" onerror="this.src=\'{logo_fallback}\'" alt="Foto {i+1}"><p class="text-center text-white/30 text-[10px] mt-1">{i+1}/{len(fotos)}</p></div>' for i,f in enumerate(fotos))
     thumbs = "".join(f'<img src="{f}" class="w-full h-full object-cover cursor-pointer rounded hover:opacity-80 transition" onclick="abrirModalFoto({i})" onerror="this.style.display=\'none\'" alt="foto {i+1}">' for i,f in enumerate(fotos[:12]))
@@ -569,8 +586,17 @@ body{{font-family:'Inter',sans-serif;background:#F5F5F0;color:#404041}}
 <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.492a.5.5 0 00.611.611l4.458-1.495A11.952 11.952 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-2.287 0-4.4-.745-6.112-2.008l-.427-.318-3.164 1.061 1.061-3.164-.318-.427A9.935 9.935 0 012 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg>
 Consultar</a>
 {enc_html}{info_sb}</div></div></div>
-<div class="mt-10 mb-4 text-center"><div class="h-px mb-4" style="background:linear-gradient(to right,transparent,#C4C6C8,transparent)"></div>
-<p class="text-[10px] font-medium" style="color:#C4C6C8">Ficha generada por {nombre_h if nombre_h else 'tu asesor'} &middot; RE/MAX</p></div></div>
+<div class="mt-10 mb-4">
+<div class="h-px mb-6" style="background:linear-gradient(to right,transparent,#C4C6C8,transparent)"></div>
+<div style="background:#f8f8f8;border:1px solid #e0e0e0;border-radius:8px;padding:16px 20px;margin-bottom:16px">
+<p class="text-xs font-semibold mb-2" style="color:#404041">Aviso importante:</p>
+<p class="text-xs leading-relaxed" style="color:#666">La siguiente información se proporciona con fines orientativos para personas en búsqueda de inmuebles. Las descripciones, imágenes y datos aquí presentados provienen de terceros y podrían corresponder a una propiedad comercializada por otra inmobiliaria.<br><br>
+Se recomienda confirmar todos los detalles con la inmobiliaria responsable de la operación.<br>
+La disponibilidad de la unidad está sujeta a cambios sin previo aviso, al igual que su precio. Las superficies, medidas, expensas y servicios mencionados son aproximados y pueden sufrir modificaciones.<br>
+Las fotografías y videos tienen carácter ilustrativo y no contractual.</p>
+</div>
+<p class="text-center text-[10px] font-medium" style="color:#C4C6C8">Ficha creada por <strong style="color:#949CA1">FichasIA</strong> &middot; {nombre_h if nombre_h else 'tu asesor'}</p>
+</div></div>
 <div id="mf" class="modal" onclick="if(event.target===this)cm()"><div class="max-w-2xl mx-auto"><button onclick="cm()" class="fixed top-4 right-4 text-white text-3xl font-bold z-50">&times;</button>{todas_fotos}</div></div>
 <script>
 function am(){{document.getElementById('mf').classList.add('active');document.body.style.overflow='hidden';}}
