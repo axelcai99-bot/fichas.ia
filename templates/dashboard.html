@@ -477,14 +477,9 @@ body {
           </div>
         </div>
 
-        <div class="field-grid mb-3">
+        <div class="field-grid one mb-3">
           <div class="field">
-            <span class="field-label">Logo URL</span>
-            <input class="input" id="g_logo" type="url"
-                   value="{{ user.logo or '' }}" placeholder="https://...">
-          </div>
-          <div class="field">
-            <span class="field-label">Google Form</span>
+            <span class="field-label">Google Form (encuesta post-visita)</span>
             <input class="input" id="g_form" type="url"
                    value="{{ user.form_url or '' }}" placeholder="https://forms.gle/...">
           </div>
@@ -533,13 +528,7 @@ body {
                    value="{{ user.whatsapp or '' }}" placeholder="5491130434062">
           </div>
         </div>
-        <div class="field-grid one mb-3">
-          <div class="field">
-            <span class="field-label">Logo URL</span>
-            <input class="input" id="p_logo" type="url"
-                   value="{{ user.logo or '' }}" placeholder="URL de tu logo">
-          </div>
-        </div>
+
         <div class="field-grid one mb-4">
           <div class="field">
             <span class="field-label">Google Form (encuesta post-visita)</span>
@@ -728,7 +717,6 @@ async function generarFicha() {
         url,
         nombre:   document.getElementById('g_nombre').value.trim(),
         whatsapp: document.getElementById('g_whatsapp').value.trim(),
-        logo:     document.getElementById('g_logo').value.trim(),
         form_url: document.getElementById('g_form').value.trim(),
       }),
     });
@@ -795,7 +783,6 @@ async function guardarPerfil() {
   const payload = {
     nombre:        document.getElementById('p_nombre').value.trim(),
     whatsapp:      document.getElementById('p_whatsapp').value.trim(),
-    logo:          document.getElementById('p_logo').value.trim(),
     form_url:      document.getElementById('p_form').value.trim(),
     netlify_token: document.getElementById('p_netlify').value.trim(),
   };
@@ -804,7 +791,6 @@ async function guardarPerfil() {
     toast('Perfil guardado');
     document.getElementById('g_nombre').value   = payload.nombre;
     document.getElementById('g_whatsapp').value = payload.whatsapp;
-    document.getElementById('g_logo').value     = payload.logo;
     document.getElementById('g_form').value     = payload.form_url;
   } else toast('Error al guardar', 'err');
 }
