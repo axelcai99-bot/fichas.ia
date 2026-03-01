@@ -514,98 +514,225 @@ def generar_html(titulo, precio, ubicacion, descripcion, fotos, detalles, caract
     def esc(t):
         if t is None: return ""
         return str(t).replace("&","&amp;").replace("<","&lt;").replace(">","&gt;").replace('"',"&quot;").replace("'","&#39;")
-    logo_fallback = "https://w7.pngwing.com/pngs/402/497/png-transparent-re-max-llc-estate-agent-re-max-alliance-pender-real-estate-house-house-balloon-logo-property.png"
-    while len(fotos) < 3: fotos.append(logo_fallback)
-    todas_fotos = "".join(f'<div id="foto-{i}" class="mb-3"><img src="{f}" class="w-full h-auto rounded-xl shadow-lg cursor-pointer hover:opacity-90 transition-all" onclick="window.open(this.src,\'_blank\')" onerror="this.src=\'{logo_fallback}\'" alt="Foto {i+1}"><p class="text-center text-white/30 text-[10px] mt-1">{i+1}/{len(fotos)}</p></div>' for i,f in enumerate(fotos))
-    thumbs = "".join(f'<img src="{f}" class="w-full h-full object-cover cursor-pointer rounded hover:opacity-80 transition" onclick="abrirModalFoto({i})" onerror="this.style.display=\'none\'" alt="foto {i+1}">' for i,f in enumerate(fotos[:12]))
-    seen={}
+
+    inicial  = (nombre_agente or "A")[0].upper()
+    nombre_h = esc(nombre_agente or "Asesor")
+    placeholder = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='500'%3E%3Crect fill='%23eeeeee' width='800' height='500'/%3E%3C/svg%3E"
+    while len(fotos) < 5:
+        fotos.append(placeholder)
+
+    # Características
+    seen = {}
     for c in (caracteristicas or []):
-        k=c.lower().strip()
-        if k not in seen: seen[k]=c
-    car=list(seen.values())
-    cl=" ".join(car).lower()
-    if detalles.get("metros_totales") and "tot" not in cl: car.insert(0,f"{detalles['metros_totales']} m² tot.")
-    if detalles.get("metros_cubiertos") and "cub" not in cl: car.insert(1 if detalles.get("metros_totales") else 0,f"{detalles['metros_cubiertos']} m² cub.")
-    if detalles.get("ambientes") and "amb" not in cl: car.append(f"{detalles['ambientes']} amb.")
-    if detalles.get("banos") and "baño" not in cl and "bano" not in cl: car.append(f"{detalles['banos']} baños")
-    car_html = ""
-    if car:
-        items="".join(f'<li class="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm" style="background:rgba(0,61,165,.05)"><span class="w-1.5 h-1.5 rounded-full flex-shrink-0" style="background:#DC1C2E"></span><span style="color:#404041">{esc(c)}</span></li>' for c in car[:12])
-        car_html=f'<div class="bg-white p-6 rounded-2xl shadow-sm" style="border:1px solid #C4C6C8"><h2 class="text-xs font-bold mb-4 uppercase tracking-[.2em]" style="color:#949CA1">Características</h2><ul class="grid grid-cols-2 md:grid-cols-3 gap-2">{items}</ul></div>'
-    info_sb=""
-    ii=[]
-    if info_adicional.get("antiguedad"): ii.append(f'<div class="flex justify-between"><span class="text-[10px] font-semibold uppercase tracking-wider" style="color:#949CA1">Antigüedad</span><span class="text-xs font-bold" style="color:#404041">{esc(info_adicional["antiguedad"])}</span></div>')
-    if info_adicional.get("expensas"): ii.append(f'<div class="flex justify-between"><span class="text-[10px] font-semibold uppercase tracking-wider" style="color:#949CA1">Expensas</span><span class="text-xs font-bold" style="color:#404041">{esc(info_adicional["expensas"])}</span></div>')
-    if ii: info_sb=f'<div class="mt-5 pt-5" style="border-top:1px solid #C4C6C8">{"".join(ii)}</div>'
-    enc_html=""
+        k = c.lower().strip()
+        if k not in seen: seen[k] = c
+    car = list(seen.values())
+    cl  = " ".join(car).lower()
+    if detalles.get("ambientes") and "amb" not in cl:       car.insert(0, f"{detalles['ambientes']} ambientes")
+    if detalles.get("banos") and "ba" not in cl:            car.insert(1, f"{detalles['banos']} baños")
+    if detalles.get("metros_totales") and "tot" not in cl:  car.append(f"{detalles['metros_totales']} m² totales")
+    if detalles.get("metros_cubiertos") and "cub" not in cl: car.append(f"{detalles['metros_cubiertos']} m² cubiertos")
+    car = car[:10]
+
+    car_items = "".join(
+        '<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:#f7f9ff;border-radius:8px">'
+        '<span style="width:8px;height:8px;background:#DC1C2E;border-radius:50%;flex-shrink:0"></span>'
+        f'<span style="font-size:13px;color:#404041;font-weight:500">{esc(c)}</span></div>'
+        for c in car
+    )
+    car_html = (
+        '<div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:24px;margin-top:16px">'
+        '<p style="font-size:10px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:#949CA1;margin-bottom:16px">Detalles de la propiedad</p>'
+        f'<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px">{car_items}</div>'
+        '</div>'
+    ) if car else ""
+
+    # Info sidebar
+    info_rows = ""
+    if info_adicional.get("antiguedad"):
+        info_rows += (
+            '<div style="display:flex;justify-content:space-between;padding:10px 0;border-top:1px solid #f0f0f0">'
+            '<span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:#949CA1">Antigüedad</span>'
+            f'<span style="font-size:12px;font-weight:700;color:#404041">{esc(info_adicional["antiguedad"])}</span></div>'
+        )
+    if info_adicional.get("expensas"):
+        info_rows += (
+            '<div style="display:flex;justify-content:space-between;padding:10px 0;border-top:1px solid #f0f0f0">'
+            '<span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:#949CA1">Expensas</span>'
+            f'<span style="font-size:12px;font-weight:700;color:#404041">{esc(info_adicional["expensas"])}</span></div>'
+        )
+
+    # Encuesta
+    enc_html = ""
     if form_url:
-        sep="&" if "?" in form_url else "?"
-        enc_html=f'<div class="mt-4"><a href="{form_url}{sep}entry.0={urllib.parse.quote(ubicacion or titulo or "")}" target="_blank" class="block w-full text-center py-3 rounded-xl font-semibold text-sm" style="background:#f0f4ff;color:#1A3668;border:1.5px solid #003DA5">👀 ¿Ya visitaste la propiedad?</a></div>'
-    desc_p="".join(f'<p class="mb-3">{esc(p.strip())}</p>' for p in descripcion.split("\n") if p.strip()) or f"<p>{esc(descripcion)}</p>"
-    nombre_h=esc(nombre_agente)
+        sep = "&" if "?" in form_url else "?"
+        enc_html = (
+            f'<a href="{form_url}{sep}entry.0={urllib.parse.quote(ubicacion or titulo or "")}" target="_blank" '
+            'style="display:block;width:100%;text-align:center;padding:12px;border-radius:10px;font-size:13px;'
+            'font-weight:600;background:#f0f4ff;color:#1A3668;border:1.5px solid #003DA5;text-decoration:none;margin-top:10px">'
+            '\U0001f440 \u00bfYa visitaste la propiedad?</a>'
+        )
+
+    # Thumbnails
+    ON = "onerror=\"this.style.display='none'\""
+    thumbs_html = ''.join(
+        f'<img src="{ff}" onclick="showPhoto({ii})" {ON} style="width:120px;height:80px;object-fit:cover;border-radius:8px;cursor:pointer;flex-shrink:0" alt="foto {ii+1}">'
+        for ii, ff in enumerate(fotos[:20])
+    )
+
+    # Modal images
+    modal_imgs = ''.join(
+        f'<div style="margin-bottom:12px"><img id="mf{ii}" src="{ff}" {ON} style="width:100%;border-radius:8px;display:block" alt="Foto {ii+1}"></div>'
+        for ii, ff in enumerate(fotos)
+    )
+
+    # Extra fotos grid
+    extra_fotos = ''.join(
+        f'<img src="{ff}" onclick="showPhoto({ii})" {ON} style="width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:8px;cursor:pointer" alt="foto {ii+1}">'
+        for ii, ff in enumerate(fotos[1:21], 1)
+    )
+
+    # Descripción
+    desc_p = "".join(
+        f'<p style="margin-bottom:12px;line-height:1.7">{esc(p.strip())}</p>'
+        for p in descripcion.split("\n") if p.strip()
+    ) or f'<p style="line-height:1.7">{esc(descripcion)}</p>'
+
+    wa_msg = urllib.parse.quote(f'Hola {nombre_agente or ""}, te contacto por la propiedad: {titulo or ""} - {ubicacion or ""}')
+
+    svg_wa = (
+        '<svg width="18" height="18" fill="white" viewBox="0 0 24 24">'
+        '<path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 '
+        '1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297'
+        '-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149'
+        '-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297'
+        '-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 '
+        '1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124'
+        '-.272-.198-.57-.347zM12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.492a.5.5 0 00.611.611'
+        'l4.458-1.495A11.952 11.952 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-2.287 0-4.4-.745-6.112-2.008'
+        'l-.427-.318-3.164 1.061 1.061-3.164-.318-.427A9.935 9.935 0 012 12C2 6.477 6.477 2 12 2s10 4.477 10 10'
+        '-4.477 10-10 10z"/></svg>'
+    )
+
     return f"""<!DOCTYPE html>
-<html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{esc(titulo)}</title>
-<script src="https://cdn.tailwindcss.com"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-body{{font-family:'Inter',sans-serif;background:#F5F5F0;color:#404041}}
-.gradient-precio{{background:linear-gradient(135deg,#003DA5,#DC1C2E);-webkit-background-clip:text;-webkit-text-fill-color:transparent}}
-.modal{{display:none;position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:1000;overflow-y:auto;padding:20px}}
-.modal.active{{display:block}}
-.desc-col{{max-height:8rem;overflow:hidden}}
-.desc-exp{{max-height:none}}
-</style></head><body>
-<div class="max-w-5xl mx-auto px-4 py-8">
-<div class="flex items-center gap-4 mb-6 bg-white p-4 rounded-2xl shadow-sm" style="border:1px solid #C4C6C8">
-<img src="{logo_fallback}" class="h-10 object-contain" style="max-width:100px" onerror="this.style.display='none'" alt="logo">
-<div><p class="font-bold text-sm" style="color:#1A3668">{nombre_h}</p><p class="text-xs" style="color:#DC1C2E">Asesor Inmobiliario</p></div></div>
-<div class="mb-6"><h1 class="text-2xl md:text-3xl font-extrabold mb-1" style="color:#1A3668">{esc(titulo)}</h1>
-<p class="text-sm" style="color:#949CA1">{esc(ubicacion)}</p>
-<p class="text-3xl font-extrabold gradient-precio mt-2">{esc(precio)}</p></div>
-<div class="mb-6 rounded-2xl overflow-hidden cursor-pointer" onclick="abrirModalFoto(0)">
-<img src="{fotos[0]}" class="w-full h-72 md:h-96 object-cover" onerror="this.src='{logo_fallback}'" alt="Foto principal"></div>
-<div class="grid grid-cols-4 gap-2 mb-8" style="height:90px">{thumbs}</div>
-<div class="grid md:grid-cols-3 gap-6">
-<div class="md:col-span-2 space-y-6">
-<div class="bg-white p-6 rounded-2xl shadow-sm" style="border:1px solid #C4C6C8">
-<h2 class="text-xs font-bold mb-4 uppercase tracking-[.2em]" style="color:#949CA1">Descripción</h2>
-<div id="dt" class="text-sm leading-relaxed desc-col" style="color:#404041">{desc_p}</div>
-<button id="bx" onclick="toggleD()" class="mt-3 text-xs font-semibold hidden" style="color:#003DA5">Ver más ▼</button>
-<button id="bc" onclick="toggleD()" class="mt-3 text-xs font-semibold hidden" style="color:#003DA5">Ver menos ▲</button></div>
-{car_html}</div>
-<div class="md:col-span-1">
-<div class="bg-white p-6 rounded-2xl shadow-lg sticky top-6 text-center" style="border:1px solid #C4C6C8;border-top:4px solid #DC1C2E">
-<p class="text-[10px] font-semibold uppercase tracking-[.15em]" style="color:#949CA1">Precio</p>
-<p class="text-2xl font-extrabold gradient-precio my-3">{esc(precio)}</p>
-<div class="my-4 h-px" style="background:linear-gradient(to right,transparent,#C4C6C8,transparent)"></div>
-<img src="{logo_fallback}" class="mx-auto mb-3 object-contain" style="max-width:90px;max-height:45px" onerror="this.style.display='none'" alt="logo">
-<p class="font-bold text-sm" style="color:#1A3668">{nombre_h}</p>
-<p class="text-[10px] font-semibold mb-4 uppercase tracking-wider" style="color:#DC1C2E">Asesor Inmobiliario</p>
-<a href="https://wa.me/{whatsapp}" class="block w-full text-white py-3 rounded-xl font-semibold text-sm shadow-md flex items-center justify-center gap-2" style="background:#25D366">
-<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.492a.5.5 0 00.611.611l4.458-1.495A11.952 11.952 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-2.287 0-4.4-.745-6.112-2.008l-.427-.318-3.164 1.061 1.061-3.164-.318-.427A9.935 9.935 0 012 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg>
-Consultar</a>
-{enc_html}{info_sb}</div></div></div>
-<div class="mt-10 mb-4">
-<div class="h-px mb-6" style="background:linear-gradient(to right,transparent,#C4C6C8,transparent)"></div>
-<div style="background:#f8f8f8;border:1px solid #e0e0e0;border-radius:8px;padding:16px 20px;margin-bottom:16px">
-<p class="text-xs font-semibold mb-2" style="color:#404041">Aviso importante:</p>
-<p class="text-xs leading-relaxed" style="color:#666">La siguiente información se proporciona con fines orientativos para personas en búsqueda de inmuebles. Las descripciones, imágenes y datos aquí presentados provienen de terceros y podrían corresponder a una propiedad comercializada por otra inmobiliaria.<br><br>
-Se recomienda confirmar todos los detalles con la inmobiliaria responsable de la operación.<br>
-La disponibilidad de la unidad está sujeta a cambios sin previo aviso, al igual que su precio. Las superficies, medidas, expensas y servicios mencionados son aproximados y pueden sufrir modificaciones.<br>
-Las fotografías y videos tienen carácter ilustrativo y no contractual.</p>
+*{{box-sizing:border-box;margin:0;padding:0}}
+body{{font-family:'Inter',sans-serif;background:#f5f5f5;color:#404041;-webkit-font-smoothing:antialiased}}
+.ct{{max-width:960px;margin:0 auto;padding:24px 16px}}
+.card{{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:24px}}
+.gp{{background:linear-gradient(135deg,#003DA5,#DC1C2E);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}}
+.strip{{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;scrollbar-width:thin}}
+.strip::-webkit-scrollbar{{height:4px}}
+.strip::-webkit-scrollbar-thumb{{background:#ddd;border-radius:4px}}
+.dc{{max-height:150px;overflow:hidden;position:relative}}
+.dc::after{{content:'';position:absolute;bottom:0;left:0;right:0;height:40px;background:linear-gradient(transparent,white)}}
+.modal{{display:none;position:fixed;inset:0;background:rgba(0,0,0,.93);z-index:9999;overflow-y:auto;padding:20px}}
+.modal.open{{display:block}}
+@media(max-width:720px){{
+  .layout{{display:block!important}}
+  .sb{{position:static!important;margin-top:16px}}
+}}
+</style>
+</head>
+<body>
+<div class="ct">
+
+  <div class="card" style="display:flex;align-items:center;gap:14px;margin-bottom:20px">
+    <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#003DA5,#DC1C2E);display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:800;color:white;flex-shrink:0">{inicial}</div>
+    <div>
+      <p style="font-weight:700;font-size:15px;color:#1A3668">{nombre_h}</p>
+      <p style="font-size:11px;color:#DC1C2E;font-weight:600;text-transform:uppercase;letter-spacing:.08em">Asesor Inmobiliario</p>
+    </div>
+  </div>
+
+  <div style="margin-bottom:20px">
+    <h1 style="font-size:clamp(20px,4vw,28px);font-weight:800;color:#1A3668;line-height:1.2;margin-bottom:6px">{esc(titulo)}</h1>
+    <p style="font-size:13px;color:#949CA1;margin-bottom:10px">{esc(ubicacion)}</p>
+    <p class="gp" style="font-size:clamp(22px,4vw,30px);font-weight:800">{esc(precio)}</p>
+  </div>
+
+  <div style="border-radius:14px;overflow:hidden;margin-bottom:10px;cursor:pointer;background:#eee" onclick="showPhoto(0)">
+    <img src="{fotos[0]}" onerror="this.style.display='none'" style="width:100%;max-height:480px;object-fit:cover;display:block" alt="Foto principal">
+  </div>
+
+  <div class="strip" style="margin-bottom:24px">{thumbs_html}</div>
+
+  <div class="layout" style="display:grid;grid-template-columns:1fr 300px;gap:20px;align-items:start">
+
+    <div>
+      <div class="card" style="margin-bottom:16px">
+        <p style="font-size:10px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:#949CA1;margin-bottom:14px">Descripción</p>
+        <div id="dt" class="dc" style="font-size:14px;color:#505050">{desc_p}</div>
+        <button id="bv" onclick="toggleDesc()" style="margin-top:12px;background:none;border:none;font-size:12px;font-weight:600;color:#003DA5;cursor:pointer;padding:0">Leer más ∨</button>
+      </div>
+      {car_html}
+      <div style="margin-top:16px;display:grid;grid-template-columns:repeat(2,1fr);gap:8px">{extra_fotos}</div>
+    </div>
+
+    <div class="sb" style="position:sticky;top:16px">
+      <div class="card" style="border-top:4px solid #DC1C2E;text-align:center">
+        <p style="font-size:10px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:#949CA1;margin-bottom:8px">Precio</p>
+        <p class="gp" style="font-size:26px;font-weight:800;margin-bottom:16px">{esc(precio)}</p>
+        <div style="height:1px;background:#f0f0f0;margin-bottom:16px"></div>
+        <div style="width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg,#003DA5,#DC1C2E);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:white;margin:0 auto 10px">{inicial}</div>
+        <p style="font-weight:700;font-size:14px;color:#1A3668">{nombre_h}</p>
+        <p style="font-size:10px;color:#DC1C2E;font-weight:600;text-transform:uppercase;letter-spacing:.08em;margin-bottom:16px">Asesor Inmobiliario</p>
+        <a href="https://wa.me/{whatsapp}?text={wa_msg}" target="_blank"
+           style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;background:#25D366;color:white;padding:13px;border-radius:10px;font-weight:700;font-size:14px;text-decoration:none;margin-bottom:2px">
+          {svg_wa} Consultar
+        </a>
+        {enc_html}
+        {f'<div style="margin-top:14px">{info_rows}</div>' if info_rows else ''}
+      </div>
+    </div>
+
+  </div>
+
+  <div style="margin-top:40px;padding-top:24px;border-top:1px solid #e5e7eb">
+    <div style="background:#f9f9f9;border:1px solid #e0e0e0;border-radius:10px;padding:18px 22px;margin-bottom:18px">
+      <p style="font-size:12px;font-weight:700;color:#404041;margin-bottom:8px">Aviso importante:</p>
+      <p style="font-size:12px;color:#666;line-height:1.7">La siguiente información se proporciona con fines orientativos para personas en búsqueda de inmuebles. Las descripciones, imágenes y datos aquí presentados provienen de terceros y podrían corresponder a una propiedad comercializada por otra inmobiliaria.<br><br>Se recomienda confirmar todos los detalles con la inmobiliaria responsable de la operación.<br>La disponibilidad de la unidad está sujeta a cambios sin previo aviso, al igual que su precio. Las superficies, medidas, expensas y servicios mencionados son aproximados y pueden sufrir modificaciones.<br>Las fotografías y videos tienen carácter ilustrativo y no contractual.</p>
+    </div>
+    <p style="text-align:center;font-size:11px;color:#bbb">Ficha creada por <strong style="color:#949CA1">FichasIA</strong> &middot; {nombre_h}</p>
+  </div>
+
 </div>
-<p class="text-center text-[10px] font-medium" style="color:#C4C6C8">Ficha creada por <strong style="color:#949CA1">FichasIA</strong> &middot; {nombre_h if nombre_h else 'tu asesor'}</p>
-</div></div>
-<div id="mf" class="modal" onclick="if(event.target===this)cm()"><div class="max-w-2xl mx-auto"><button onclick="cm()" class="fixed top-4 right-4 text-white text-3xl font-bold z-50">&times;</button>{todas_fotos}</div></div>
+
+<div id="modal" class="modal" onclick="if(event.target===this)closeModal()">
+  <div style="max-width:800px;margin:0 auto;position:relative">
+    <button onclick="closeModal()" style="position:fixed;top:16px;right:20px;background:none;border:none;color:white;font-size:36px;cursor:pointer;line-height:1;z-index:10">&times;</button>
+    <div style="display:flex;flex-direction:column;gap:10px">{modal_imgs}</div>
+  </div>
+</div>
+
 <script>
-function am(){{document.getElementById('mf').classList.add('active');document.body.style.overflow='hidden';}}
-function abrirModalFoto(i){{am();setTimeout(()=>{{const el=document.getElementById('foto-'+i);if(el)el.scrollIntoView({{behavior:'smooth',block:'start'}});}},150);}}
-function cm(){{document.getElementById('mf').classList.remove('active');document.body.style.overflow='auto';}}
-document.addEventListener('keydown',e=>{{if(e.key==='Escape')cm();}});
-function toggleD(){{const d=document.getElementById('dt'),bx=document.getElementById('bx'),bc=document.getElementById('bc');if(d.classList.contains('desc-col')){{d.classList.replace('desc-col','desc-exp');bx.classList.add('hidden');bc.classList.remove('hidden');}}else{{d.classList.replace('desc-exp','desc-col');bx.classList.remove('hidden');bc.classList.add('hidden');}}}}
-window.addEventListener('DOMContentLoaded',()=>{{const d=document.getElementById('dt'),b=document.getElementById('bx');if(d&&b&&d.scrollHeight>d.clientHeight+20)b.classList.remove('hidden');}});
-</script></body></html>"""
+function showPhoto(i){{
+  document.getElementById('modal').classList.add('open');
+  document.body.style.overflow='hidden';
+  setTimeout(function(){{var el=document.getElementById('mf'+i);if(el)el.scrollIntoView({{behavior:'auto',block:'start'}});}},60);
+}}
+function closeModal(){{document.getElementById('modal').classList.remove('open');document.body.style.overflow='';}}
+document.addEventListener('keydown',function(e){{if(e.key==='Escape')closeModal();}});
+var de=false;
+function toggleDesc(){{
+  var d=document.getElementById('dt'),b=document.getElementById('bv');
+  de=!de;
+  if(de){{d.classList.remove('dc');b.textContent='Ver menos ∧';}}
+  else{{d.classList.add('dc');b.textContent='Leer más ∨';}}
+}}
+window.addEventListener('DOMContentLoaded',function(){{
+  var d=document.getElementById('dt'),b=document.getElementById('bv');
+  if(d&&b&&d.scrollHeight<=160)b.style.display='none';
+}});
+</script>
+</body>
+</html>"""
 
 
 if __name__ == "__main__":
