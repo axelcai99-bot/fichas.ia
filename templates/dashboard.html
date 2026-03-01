@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FichasIA — Panel</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600;700&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #1e1208;
+  --surface:   #261709;
+  --surface2:  #2e1e0c;
+  --border:    #3d2a14;
+  --border2:   #4a3318;
+  --text:      #fefad7;
+  --muted:     #8c8757;
+  --muted2:    #4a3318;
+  --accent:    #bf3d0b;
+  --gold:      #ffbb22;
+  --gold-soft: rgba(255,187,34,0.12);
+  --acc-soft:  rgba(191,61,11,0.14);
+  --green:     #25D366;
+  --sidebar:   240px;
+}
+
+html { height: 100%; }
+
+body {
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+  display: flex;
+}
+
+/* ══════════ SIDEBAR ══════════ */
+.sidebar {
+  width: var(--sidebar);
+  min-width: var(--sidebar);
+  max-width: var(--sidebar);
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  overflow-y: auto;
+  flex-shrink: 0;
+  transition: transform .25s cubic-bezier(.22,1,.36,1);
+  z-index: 100;
+}
+
+.sb-brand {
+  display: flex; align-items: center; gap: 10px;
+  padding: 22px 20px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.sb-icon {
+  width: 30px; height: 30px;
+  background: var(--accent);
+  border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'DM Serif Display', serif;
+  font-size: 16px; color: var(--text); flex-shrink: 0;
+}
+
+.sb-name {
+  font-family: 'DM Serif Display', serif;
+  font-size: 18px; color: var(--text);
+  letter-spacing: -0.02em;
+}
+
+.sb-body { flex: 1; padding: 8px 10px; overflow-y: auto; }
+
+.sb-section {
+  font-size: 10px; font-weight: 600;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--muted2); padding: 14px 10px 6px;
+}
+
+.nav-btn {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 9px 12px;
+  border: none; background: none;
+  color: var(--muted);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13.5px; font-weight: 400;
+  border-radius: 6px; cursor: pointer;
+  transition: all .15s; text-align: left;
+  margin-bottom: 1px;
+}
+
+.nav-btn:hover { background: var(--surface2); color: var(--text); }
+.nav-btn.active {
+  background: var(--acc-soft);
+  color: #e8835a;
+  font-weight: 500;
+}
+
+.nav-icon { font-size: 14px; flex-shrink: 0; }
+
+.sb-footer {
+  border-top: 1px solid var(--border);
+  padding: 14px 16px;
+  display: flex; align-items: center; gap: 10px;
+  flex-shrink: 0;
+}
+
+.user-av {
+  width: 30px; height: 30px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), #8a2c07);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 600; color: var(--text); flex-shrink: 0;
+}
+
+.user-meta { flex: 1; min-width: 0; }
+.user-name  { font-size: 12.5px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.user-role  { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-top: 1px; }
+
+.logout-btn {
+  background: none; border: none;
+  color: var(--muted); cursor: pointer;
+  font-size: 16px; padding: 5px; border-radius: 4px;
+  transition: color .15s; text-decoration: none;
+  display: flex; align-items: center; flex-shrink: 0;
+}
+.logout-btn:hover { color: var(--accent); }
+
+/* ══════════ MOBILE OVERLAY ══════════ */
+.sidebar-overlay {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.65);
+  z-index: 99;
+}
+
+/* ══════════ MAIN ══════════ */
+.main {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column;
+  min-height: 100vh;
+}
+
+.topbar {
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  padding: 14px 24px;
+  flex-shrink: 0;
+  display: flex; align-items: center; gap: 14px;
+}
+
+.hamburger {
+  display: none;
+  background: none; border: none;
+  color: var(--muted); cursor: pointer;
+  font-size: 20px; padding: 4px;
+  flex-shrink: 0;
+}
+
+.topbar-titles { flex: 1; min-width: 0; }
+
+.page-title {
+  font-family: 'DM Serif Display', serif;
+  font-size: 20px; color: var(--text);
+  letter-spacing: -0.02em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.page-sub {
+  font-size: 12px; color: var(--muted); margin-top: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.content {
+  flex: 1; padding: 24px 24px;
+  width: 100%;
+}
+
+/* ══════════ PANELES ══════════ */
+.panel { display: none; width: 100%; }
+.panel.active { display: block; animation: fadeIn .2s ease; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+/* ══════════ CARD ══════════ */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 22px;
+  margin-bottom: 14px;
+  width: 100%;
+}
+
+.card-label {
+  display: block;
+  font-size: 10px; font-weight: 600;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--muted);
+  padding-bottom: 14px; margin-bottom: 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* ══════════ FORM ══════════ */
+.field-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px; margin-bottom: 12px;
+}
+.field-grid.one { grid-template-columns: 1fr; }
+
+.field { display: flex; flex-direction: column; gap: 6px; }
+
+.field-label {
+  font-size: 11px; font-weight: 500;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--muted);
+}
+
+.input {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border2);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px; font-weight: 400;
+  padding: 10px 13px;
+  outline: none;
+  transition: border-color .2s, box-shadow .2s;
+}
+.input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(255,187,34,.1); }
+.input::placeholder { color: #3d2a14; }
+
+.url-input {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px; padding: 13px 16px;
+  outline: none;
+  transition: border-color .25s, box-shadow .25s;
+  margin-bottom: 16px;
+}
+.url-input:focus { border-color: var(--gold); box-shadow: 0 0 0 4px rgba(255,187,34,.1); }
+.url-input::placeholder { color: #3d2a14; font-size: 13px; }
+
+/* ══════════ BOTONES ══════════ */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 10px 20px; border-radius: 7px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13.5px; font-weight: 500;
+  cursor: pointer; border: none; transition: all .15s;
+}
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+
+.btn-primary { background: var(--accent); color: var(--text); }
+.btn-primary:hover:not(:disabled) { background: #d4450d; transform: translateY(-1px); box-shadow: 0 4px 14px rgba(191,61,11,.35); }
+
+.btn-ghost { background: var(--surface2); color: var(--text); border: 1px solid var(--border2); }
+.btn-ghost:hover { background: var(--border); }
+
+.btn-green { background: var(--green); color: white; }
+.btn-green:hover:not(:disabled) { background: #1aab50; transform: translateY(-1px); }
+
+.btn-full { width: 100%; padding: 14px; font-size: 15px; font-weight: 600; margin-top: 8px; }
+.btn-row  { display: flex; gap: 10px; flex-wrap: wrap; }
+
+/* ══════════ LOG ══════════ */
+.log-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.log-title { font-size: 12.5px; font-weight: 500; }
+.log-box {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: 'Courier New', monospace;
+  font-size: 12px; color: #d4954a;
+  padding: 14px 16px; height: 200px;
+  overflow-y: auto; white-space: pre-wrap; line-height: 1.7;
+}
+
+/* ══════════ RESULTADO ══════════ */
+.result-box {
+  background: var(--gold-soft);
+  border: 1px solid rgba(255,187,34,.2);
+  border-radius: 7px; padding: 14px 16px; margin-bottom: 14px;
+}
+.result-lbl  { font-size: 11px; color: var(--muted); margin-bottom: 5px; }
+.result-link { color: var(--gold); font-size: 13px; word-break: break-all; }
+
+/* ══════════ SPINNER ══════════ */
+.spinner {
+  border: 2px solid var(--border2);
+  border-top-color: var(--gold);
+  border-radius: 50%; width: 14px; height: 14px;
+  animation: spin .7s linear infinite; flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ══════════ TABLA USUARIOS ══════════ */
+.admin-head { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 20px; gap: 12px; }
+.admin-head h2 { font-family: 'DM Serif Display', serif; font-size: 20px; color: var(--text); }
+.admin-head p  { font-size: 12px; color: var(--muted); margin-top: 3px; }
+
+.user-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.user-table th { text-align: left; font-size: 10px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); padding: 0 12px 12px; border-bottom: 1px solid var(--border); }
+.user-table td { padding: 13px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.user-table tr:last-child td { border-bottom: none; }
+.user-table tr:hover td { background: rgba(255,255,255,.015); }
+
+.badge { display: inline-flex; align-items: center; font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; }
+.badge-admin  { background: var(--gold-soft); color: var(--gold); }
+.badge-user   { background: var(--acc-soft); color: #e8835a; }
+.badge-active { background: rgba(37,211,102,.12); color: #4ade80; }
+.badge-off    { background: rgba(255,255,255,.04); color: var(--muted); }
+
+/* ══════════ MISC ══════════ */
+.note { font-size: 11.5px; color: var(--muted); line-height: 1.5; margin-top: 5px; }
+.note a { color: var(--gold); }
+.divider { height: 1px; background: var(--border); margin: 20px 0; }
+.mb-3 { margin-bottom: 12px; }
+.mb-4 { margin-bottom: 16px; }
+.mt-4 { margin-top: 16px; }
+
+/* ══════════ MODAL ══════════ */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.8); z-index: 200;
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+  opacity: 0; pointer-events: none; transition: opacity .2s;
+}
+.modal-overlay.open { opacity: 1; pointer-events: all; }
+.modal-box {
+  background: var(--surface); border: 1px solid var(--border2);
+  border-radius: 10px; width: 100%; max-width: 420px;
+  padding: 28px; animation: fadeIn .2s ease;
+}
+.modal-title { font-family: 'DM Serif Display', serif; font-size: 20px; color: var(--text); margin-bottom: 20px; }
+
+/* ══════════ TOAST ══════════ */
+.toast {
+  position: fixed; bottom: 24px; right: 24px; z-index: 500;
+  background: var(--surface); border: 1px solid var(--border2); border-radius: 7px;
+  padding: 13px 18px; font-size: 13px; color: var(--text);
+  display: flex; align-items: center; gap: 10px;
+  box-shadow: 0 8px 32px rgba(0,0,0,.6);
+  transform: translateY(80px); opacity: 0;
+  transition: all .3s cubic-bezier(.22,1,.36,1); min-width: 200px;
+}
+.toast.show { transform: translateY(0); opacity: 1; }
+.toast.ok  { border-left: 3px solid #4ade80; }
+.toast.err { border-left: 3px solid var(--accent); }
+
+/* ══════════ RESPONSIVE MOBILE ══════════ */
+@media (max-width: 768px) {
+  body { display: block; }
+
+  .sidebar {
+    position: fixed; top: 0; left: 0; bottom: 0;
+    transform: translateX(-100%);
+    z-index: 100;
+  }
+  .sidebar.open { transform: translateX(0); }
+  .sidebar-overlay.show { display: block; }
+
+  .main { margin-left: 0; min-height: 100vh; }
+
+  .hamburger { display: flex; }
+
+  .content { padding: 16px; }
+
+  .field-grid { grid-template-columns: 1fr; }
+
+  .topbar { padding: 12px 16px; }
+
+  .page-title { font-size: 17px; }
+
+  .btn-full { font-size: 14px; padding: 13px; }
+
+  .user-table { font-size: 12px; }
+  .user-table th, .user-table td { padding: 10px 8px; }
+
+  .admin-head { flex-direction: column; }
+  .admin-head .btn { width: 100%; justify-content: center; }
+
+  .toast { left: 16px; right: 16px; bottom: 16px; min-width: 0; }
+}
+</style>
+</head>
+<body>
+
+<!-- ══════ OVERLAY MOBILE ══════ -->
+<div class="sidebar-overlay" id="sb-overlay" onclick="closeSidebar()"></div>
+
+<!-- ══════════════════ SIDEBAR ══════════════════ -->
+<aside class="sidebar" id="sidebar">
+  <div class="sb-brand">
+    <div class="sb-icon">F</div>
+    <div class="sb-name">FichasIA</div>
+  </div>
+
+  <div class="sb-body">
+    <div class="sb-section">Herramientas</div>
+    <button class="nav-btn active" onclick="showPanel('generar', this)">
+      <span class="nav-icon">🏠</span> Generar ficha
+    </button>
+
+    <div class="sb-section">Cuenta</div>
+    <button class="nav-btn" onclick="showPanel('perfil', this)">
+      <span class="nav-icon">⚙️</span> Mi perfil
+    </button>
+    <button class="nav-btn" onclick="showPanel('pass', this)">
+      <span class="nav-icon">🔑</span> Contraseña
+    </button>
+
+    {% if is_admin %}
+    <div class="sb-section">Admin</div>
+    <button class="nav-btn" onclick="showPanel('usuarios', this); cargarUsuarios()">
+      <span class="nav-icon">👥</span> Usuarios
+    </button>
+    {% endif %}
+  </div>
+
+  <div class="sb-footer">
+    <div class="user-av">{{ (user.nombre or username)[0].upper() }}</div>
+    <div class="user-meta">
+      <div class="user-name">{{ user.nombre or username }}</div>
+      <div class="user-role">{{ user.role }}</div>
+    </div>
+    <a href="/logout" class="logout-btn" title="Cerrar sesión">↩</a>
+  </div>
+</aside>
+
+<!-- ══════════════════ MAIN ══════════════════ -->
+<div class="main">
+  <div class="topbar">
+    <button class="hamburger" id="hamburger" onclick="toggleSidebar()">☰</button>
+    <div class="topbar-titles">
+      <div class="page-title" id="page-title">Generador de Fichas</div>
+      <div class="page-sub"   id="page-sub">Pegá el link y en minutos tenés la ficha lista</div>
+    </div>
+  </div>
+
+  <div class="content">
+
+    <!-- ── GENERAR ─────────────────────────────────────── -->
+    <div class="panel active" id="panel-generar">
+
+      <div class="card">
+        <span class="card-label">Link de la propiedad</span>
+        <input class="url-input" id="url" type="url"
+               placeholder="https://www.zonaprop.com.ar/propiedades/...">
+
+        <div class="field-grid mb-3">
+          <div class="field">
+            <span class="field-label">Tu nombre</span>
+            <input class="input" id="g_nombre" type="text"
+                   value="{{ user.nombre or '' }}" placeholder="Christian González">
+          </div>
+          <div class="field">
+            <span class="field-label">WhatsApp (sin +)</span>
+            <input class="input" id="g_whatsapp" type="text"
+                   value="{{ user.whatsapp or '' }}" placeholder="5491130434062">
+          </div>
+        </div>
+
+        <div class="field-grid mb-3">
+          <div class="field">
+            <span class="field-label">Logo URL</span>
+            <input class="input" id="g_logo" type="url"
+                   value="{{ user.logo or '' }}" placeholder="https://...">
+          </div>
+          <div class="field">
+            <span class="field-label">Google Form</span>
+            <input class="input" id="g_form" type="url"
+                   value="{{ user.form_url or '' }}" placeholder="https://forms.gle/...">
+          </div>
+        </div>
+
+        <button class="btn btn-primary btn-full" id="btn-generar" onclick="generarFicha()">
+          🚀 Generar Ficha Ahora
+        </button>
+      </div>
+
+      <div class="card" id="log-card" style="display:none">
+        <div class="log-head">
+          <div class="spinner" id="log-spinner"></div>
+          <span class="log-title" id="log-status">Procesando...</span>
+        </div>
+        <div class="log-box" id="log-box"></div>
+      </div>
+
+      <div class="card" id="result-card" style="display:none">
+        <span class="card-label">🎉 Ficha lista para compartir</span>
+        <div class="result-box">
+          <div class="result-lbl">Link de la ficha:</div>
+          <a id="result-link" href="#" target="_blank" class="result-link"></a>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-ghost" id="btn-copiar" onclick="copiarLink()">📋 Copiar link</button>
+          <button class="btn btn-green" onclick="abrirWpp()">💬 WhatsApp</button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ── PERFIL ──────────────────────────────────────── -->
+    <div class="panel" id="panel-perfil">
+      <div class="card" style="max-width:580px">
+        <span class="card-label">Datos del agente</span>
+        <div class="field-grid mb-3">
+          <div class="field">
+            <span class="field-label">Nombre completo</span>
+            <input class="input" id="p_nombre" type="text"
+                   value="{{ user.nombre or '' }}" placeholder="Tu nombre">
+          </div>
+          <div class="field">
+            <span class="field-label">WhatsApp (sin +)</span>
+            <input class="input" id="p_whatsapp" type="text"
+                   value="{{ user.whatsapp or '' }}" placeholder="5491130434062">
+          </div>
+        </div>
+        <div class="field-grid one mb-3">
+          <div class="field">
+            <span class="field-label">Logo URL</span>
+            <input class="input" id="p_logo" type="url"
+                   value="{{ user.logo or '' }}" placeholder="URL de tu logo">
+          </div>
+        </div>
+        <div class="field-grid one mb-4">
+          <div class="field">
+            <span class="field-label">Google Form (encuesta post-visita)</span>
+            <input class="input" id="p_form" type="url"
+                   value="{{ user.form_url or '' }}" placeholder="https://forms.gle/...">
+            <p class="note">Se incluye como botón en cada ficha generada</p>
+          </div>
+        </div>
+        <div class="divider"></div>
+        <div class="field-grid one mb-4">
+          <div class="field">
+            <span class="field-label">Token de Netlify</span>
+            <input class="input" id="p_netlify" type="password"
+                   value="{{ user.netlify_token or '' }}" placeholder="nfp_...">
+            <p class="note">
+              Obtené el tuyo gratis en
+              <a href="https://app.netlify.com/user/applications" target="_blank">
+                app.netlify.com → User Settings → Applications → New access token
+              </a>
+            </p>
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="guardarPerfil()">Guardar cambios</button>
+      </div>
+    </div>
+
+    <!-- ── CONTRASEÑA ──────────────────────────────────── -->
+    <div class="panel" id="panel-pass">
+      <div class="card" style="max-width:440px">
+        <span class="card-label">Cambiar contraseña</span>
+        <div class="field mb-3">
+          <span class="field-label">Contraseña actual</span>
+          <input class="input" id="pw_actual" type="password" placeholder="••••••••">
+        </div>
+        <div class="field mb-3">
+          <span class="field-label">Contraseña nueva</span>
+          <input class="input" id="pw_nueva" type="password" placeholder="Mínimo 6 caracteres">
+        </div>
+        <div class="field mb-4">
+          <span class="field-label">Confirmar nueva</span>
+          <input class="input" id="pw_confirmar" type="password" placeholder="••••••••">
+        </div>
+        <button class="btn btn-primary" onclick="cambiarPassword()">Actualizar contraseña</button>
+      </div>
+    </div>
+
+    <!-- ── USUARIOS (admin) ───────────────────────────── -->
+    {% if is_admin %}
+    <div class="panel" id="panel-usuarios">
+      <div class="admin-head">
+        <div>
+          <h2>Usuarios</h2>
+          <p>Gestioná las cuentas de tus agentes</p>
+        </div>
+        <button class="btn btn-primary" onclick="abrirModalCrear()">+ Nuevo usuario</button>
+      </div>
+      <div class="card" style="overflow-x:auto">
+        <table class="user-table">
+          <thead>
+            <tr>
+              <th>Agente</th>
+              <th>Usuario</th>
+              <th>Rol</th>
+              <th>Estado</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="users-body">
+            <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:32px">Cargando...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+
+<!-- ══════════════ MODALES ══════════════ -->
+{% if is_admin %}
+<div class="modal-overlay" id="modal-crear">
+  <div class="modal-box">
+    <div class="modal-title">Nuevo usuario</div>
+    <div class="field mb-3">
+      <span class="field-label">Nombre completo</span>
+      <input class="input" id="new_nombre" type="text" placeholder="Christian González">
+    </div>
+    <div class="field mb-3">
+      <span class="field-label">Usuario (para login)</span>
+      <input class="input" id="new_user" type="text" placeholder="christiang" autocomplete="off">
+    </div>
+    <div class="field mb-4">
+      <span class="field-label">Contraseña inicial</span>
+      <input class="input" id="new_pass" type="password" placeholder="Mínimo 6 caracteres" autocomplete="off">
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="crearUsuario()">Crear cuenta</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-reset">
+  <div class="modal-box">
+    <div class="modal-title">Resetear contraseña</div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:16px">
+      Nueva contraseña para <strong id="reset-label" style="color:var(--text)"></strong>
+    </p>
+    <div class="field mb-4">
+      <span class="field-label">Nueva contraseña</span>
+      <input class="input" id="reset_pass" type="password" placeholder="Mínimo 6 caracteres">
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="cerrarModalReset()">Cancelar</button>
+      <button class="btn btn-primary" onclick="confirmarReset()">Guardar</button>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<div class="toast" id="toast"></div>
+
+<script>
+let currentUrl = null;
+let resetTarget = null;
+
+const PANELS = {
+  generar:  ['Generador de Fichas',  'Pegá el link y en minutos tenés la ficha lista'],
+  perfil:   ['Mi Perfil',            'Configurá tus datos y token de Netlify'],
+  pass:     ['Contraseña',           'Actualizá tu contraseña de acceso'],
+  usuarios: ['Usuarios',             'Gestioná las cuentas de tus agentes'],
+};
+
+/* ── Sidebar mobile ──────────────── */
+function toggleSidebar() {
+  const sb = document.getElementById('sidebar');
+  const ov = document.getElementById('sb-overlay');
+  sb.classList.toggle('open');
+  ov.classList.toggle('show');
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sb-overlay').classList.remove('show');
+}
+
+/* ── Paneles ──────────────────────── */
+function showPanel(id, btn) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  const el = document.getElementById('panel-' + id);
+  if (el) el.classList.add('active');
+  if (btn) btn.classList.add('active');
+  const m = PANELS[id];
+  if (m) {
+    document.getElementById('page-title').textContent = m[0];
+    document.getElementById('page-sub').textContent   = m[1];
+  }
+  closeSidebar();
+}
+
+/* ── Toast ────────────────────────── */
+function toast(msg, type = 'ok') {
+  const el = document.getElementById('toast');
+  el.textContent = (type === 'ok' ? '✓  ' : '✗  ') + msg;
+  el.className = `toast ${type} show`;
+  setTimeout(() => el.classList.remove('show'), 3500);
+}
+
+/* ── Generar ──────────────────────── */
+async function generarFicha() {
+  const url = document.getElementById('url').value.trim();
+  if (!url) { toast('Pegá el link de la propiedad primero', 'err'); return; }
+  const btn = document.getElementById('btn-generar');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner" style="border-top-color:#fefad7;width:16px;height:16px"></div> Procesando...';
+  document.getElementById('log-card').style.display    = 'block';
+  document.getElementById('result-card').style.display = 'none';
+  document.getElementById('log-box').textContent       = '';
+  document.getElementById('log-spinner').style.display = 'block';
+  document.getElementById('log-status').textContent    = 'Procesando...';
+  try {
+    const res = await fetch('/api/generar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        url,
+        nombre:   document.getElementById('g_nombre').value.trim(),
+        whatsapp: document.getElementById('g_whatsapp').value.trim(),
+        logo:     document.getElementById('g_logo').value.trim(),
+        form_url: document.getElementById('g_form').value.trim(),
+      }),
+    });
+    if (!res.ok) { toast('Error al iniciar el proceso', 'err'); resetBtn(); return; }
+    const { job_id } = await res.json();
+    escucharLogs(job_id);
+  } catch(e) { toast('Error de red', 'err'); resetBtn(); }
+}
+
+function escucharLogs(jobId) {
+  const logBox = document.getElementById('log-box');
+  const es = new EventSource(`/api/stream/${jobId}`);
+  es.addEventListener('message', e => {
+    logBox.textContent += e.data + '\n';
+    logBox.scrollTop = logBox.scrollHeight;
+  });
+  es.addEventListener('done', e => {
+    es.close();
+    document.getElementById('log-spinner').style.display = 'none';
+    document.getElementById('log-status').textContent = '✓ Completado';
+    resetBtn();
+    const url = e.data.trim();
+    if (url) {
+      currentUrl = url;
+      document.getElementById('result-link').textContent = url;
+      document.getElementById('result-link').href = url;
+      document.getElementById('result-card').style.display = 'block';
+      document.getElementById('result-card').scrollIntoView({ behavior: 'smooth' });
+    }
+  });
+  es.addEventListener('error', () => {
+    es.close();
+    logBox.textContent += '\n❌ Error\n';
+    document.getElementById('log-spinner').style.display = 'none';
+    document.getElementById('log-status').textContent = '✗ Error';
+    resetBtn();
+  });
+}
+
+function resetBtn() {
+  const btn = document.getElementById('btn-generar');
+  btn.disabled = false;
+  btn.innerHTML = '🚀 Generar Ficha Ahora';
+}
+
+function copiarLink() {
+  if (!currentUrl) return;
+  navigator.clipboard.writeText(currentUrl).then(() => {
+    const btn = document.getElementById('btn-copiar');
+    btn.textContent = '✓ Copiado';
+    setTimeout(() => btn.textContent = '📋 Copiar link', 2000);
+  });
+}
+
+function abrirWpp() {
+  if (!currentUrl) return;
+  const nombre = document.getElementById('g_nombre').value.trim() || 'Tu asesor';
+  const msg = `¡Hola! 👋 Te comparto la ficha:\n\n🏠 ${currentUrl}\n\nSaludos, ${nombre}`;
+  window.open(`https://web.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
+}
+
+/* ── Perfil ───────────────────────── */
+async function guardarPerfil() {
+  const payload = {
+    nombre:        document.getElementById('p_nombre').value.trim(),
+    whatsapp:      document.getElementById('p_whatsapp').value.trim(),
+    logo:          document.getElementById('p_logo').value.trim(),
+    form_url:      document.getElementById('p_form').value.trim(),
+    netlify_token: document.getElementById('p_netlify').value.trim(),
+  };
+  const res = await fetch('/api/perfil', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+  if (res.ok) {
+    toast('Perfil guardado');
+    document.getElementById('g_nombre').value   = payload.nombre;
+    document.getElementById('g_whatsapp').value = payload.whatsapp;
+    document.getElementById('g_logo').value     = payload.logo;
+    document.getElementById('g_form').value     = payload.form_url;
+  } else toast('Error al guardar', 'err');
+}
+
+/* ── Contraseña ───────────────────── */
+async function cambiarPassword() {
+  const pw_actual    = document.getElementById('pw_actual').value;
+  const pw_nueva     = document.getElementById('pw_nueva').value;
+  const pw_confirmar = document.getElementById('pw_confirmar').value;
+  if (pw_nueva !== pw_confirmar) { toast('Las contraseñas no coinciden', 'err'); return; }
+  if (pw_nueva.length < 6) { toast('Mínimo 6 caracteres', 'err'); return; }
+  const res = await fetch('/api/cambiar_password', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ pw_actual, pw_nueva }) });
+  const data = await res.json();
+  if (res.ok) {
+    toast('Contraseña actualizada');
+    ['pw_actual','pw_nueva','pw_confirmar'].forEach(id => document.getElementById(id).value = '');
+  } else toast(data.error || 'Error', 'err');
+}
+
+/* ── Admin ────────────────────────── */
+{% if is_admin %}
+async function cargarUsuarios() {
+  const res = await fetch('/api/admin/usuarios');
+  const users = await res.json();
+  document.getElementById('users-body').innerHTML = users.map(u => `
+    <tr>
+      <td><strong>${u.nombre || u.username}</strong></td>
+      <td style="color:var(--muted);font-size:12px">${u.username}</td>
+      <td><span class="badge ${u.role === 'admin' ? 'badge-admin' : 'badge-user'}">${u.role}</span></td>
+      <td><span class="badge ${u.active ? 'badge-active' : 'badge-off'}">${u.active ? 'Activo' : 'Inactivo'}</span></td>
+      <td>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          ${u.username !== 'admin' ? `<button class="btn btn-ghost" style="padding:6px 10px;font-size:12px" onclick="toggleUser('${u.username}')">${u.active ? 'Desactivar' : 'Activar'}</button>` : ''}
+          <button class="btn btn-ghost" style="padding:6px 10px;font-size:12px" onclick="abrirReset('${u.username}')">Reset pass</button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function abrirModalCrear() { document.getElementById('modal-crear').classList.add('open'); setTimeout(() => document.getElementById('new_nombre').focus(), 50); }
+function cerrarModal()     { document.getElementById('modal-crear').classList.remove('open'); }
+
+async function crearUsuario() {
+  const nombre   = document.getElementById('new_nombre').value.trim();
+  const username = document.getElementById('new_user').value.trim();
+  const password = document.getElementById('new_pass').value.trim();
+  if (!nombre || !username || !password) { toast('Completá todos los campos', 'err'); return; }
+  const res = await fetch('/api/admin/crear_usuario', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ nombre, username, password }) });
+  const data = await res.json();
+  if (res.ok) {
+    cerrarModal(); toast(`Usuario "${username}" creado`); cargarUsuarios();
+    ['new_nombre','new_user','new_pass'].forEach(id => document.getElementById(id).value = '');
+  } else toast(data.error || 'Error', 'err');
+}
+
+async function toggleUser(username) {
+  const res = await fetch('/api/admin/toggle_usuario', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ username }) });
+  if (res.ok) { cargarUsuarios(); toast('Usuario actualizado'); }
+  else toast('Error', 'err');
+}
+
+function abrirReset(username) {
+  resetTarget = username;
+  document.getElementById('reset-label').textContent = username;
+  document.getElementById('reset_pass').value = '';
+  document.getElementById('modal-reset').classList.add('open');
+  setTimeout(() => document.getElementById('reset_pass').focus(), 50);
+}
+function cerrarModalReset() { document.getElementById('modal-reset').classList.remove('open'); resetTarget = null; }
+
+async function confirmarReset() {
+  const password = document.getElementById('reset_pass').value.trim();
+  if (password.length < 6) { toast('Mínimo 6 caracteres', 'err'); return; }
+  const res = await fetch('/api/admin/reset_password', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ username: resetTarget, password }) });
+  if (res.ok) { cerrarModalReset(); toast('Contraseña reseteada'); }
+  else { const d = await res.json(); toast(d.error || 'Error', 'err'); }
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { cerrarModal(); cerrarModalReset(); closeSidebar(); }
+});
+{% endif %}
+</script>
+</body>
+</html>
