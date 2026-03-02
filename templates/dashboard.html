@@ -417,6 +417,9 @@ body {
     <button class="nav-btn active" onclick="showPanel('generar', this)">
       <span class="nav-icon">🏠</span> Generar ficha
     </button>
+    <button class="nav-btn" onclick="showPanel('propiedades', this); cargarPropiedadesActivas()">
+      <span class="nav-icon">📋</span> Propiedades activas
+    </button>
 
     <div class="sb-section">Cuenta</div>
     <button class="nav-btn" onclick="showPanel('perfil', this)">
@@ -512,6 +515,35 @@ body {
 
     </div>
 
+    <!-- ── PROPIEDADES ACTIVAS ─────────────────────────── -->
+    <div class="panel" id="panel-propiedades">
+      <div class="card" id="active-properties-card">
+        <div class="admin-head" style="margin-bottom:12px">
+          <div>
+            <span class="card-label" style="padding-bottom:0;margin-bottom:0;border-bottom:none">Propiedades activas</span>
+            <p class="note">Fichas disponibles actualmente en el sistema local</p>
+          </div>
+          <button class="btn btn-ghost" style="padding:8px 12px" onclick="cargarPropiedadesActivas()">Recargar</button>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="user-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Propiedad</th>
+                <th>Precio</th>
+                <th>Ubicación</th>
+                <th>Creada</th>
+              </tr>
+            </thead>
+            <tbody id="properties-body">
+              <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px">Cargando propiedades...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <!-- ── PERFIL ──────────────────────────────────────── -->
     <div class="panel" id="panel-perfil">
       <div class="card" style="max-width:580px">
@@ -535,20 +567,6 @@ body {
             <input class="input" id="p_form" type="url"
                    value="{{ user.form_url or '' }}" placeholder="https://forms.gle/...">
             <p class="note">Se incluye como botón en cada ficha generada</p>
-          </div>
-        </div>
-        <div class="divider"></div>
-        <div class="field-grid one mb-4">
-          <div class="field">
-            <span class="field-label">Token de Netlify</span>
-            <input class="input" id="p_netlify" type="password"
-                   value="{{ user.netlify_token or '' }}" placeholder="nfp_...">
-            <p class="note">
-              Obtené el tuyo gratis en
-              <a href="https://app.netlify.com/user/applications" target="_blank">
-                app.netlify.com → User Settings → Applications → New access token
-              </a>
-            </p>
           </div>
         </div>
         <button class="btn btn-primary" onclick="guardarPerfil()">Guardar cambios</button>
@@ -657,7 +675,8 @@ let resetTarget = null;
 
 const PANELS = {
   generar:  ['Generador de Fichas',  'Pegá el link y en minutos tenés la ficha lista'],
-  perfil:   ['Mi Perfil',            'Configurá tus datos y token de Netlify'],
+  propiedades: ['Propiedades activas', 'Listado de fichas generadas en local'],
+  perfil:   ['Mi Perfil',            'Configurá tus datos de contacto'],
   pass:     ['Contraseña',           'Actualizá tu contraseña de acceso'],
   usuarios: ['Usuarios',             'Gestioná las cuentas de tus agentes'],
 };
@@ -745,6 +764,7 @@ function escucharLogs(jobId) {
       document.getElementById('result-link').href = url;
       document.getElementById('result-card').style.display = 'block';
       document.getElementById('result-card').scrollIntoView({ behavior: 'smooth' });
+      cargarPropiedadesActivas();
     }
   });
   es.addEventListener('error', () => {
@@ -778,13 +798,42 @@ function abrirWpp() {
   window.open(`https://web.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
 }
 
+/* ── Propiedades activas ───────────── */
+async function cargarPropiedadesActivas() {
+  const tbody = document.getElementById('properties-body');
+  if (!tbody) return;
+  try {
+    const res = await fetch('/propiedades');
+    if (!res.ok) throw new Error('error');
+    const props = await res.json();
+    if (!props.length) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px">No hay propiedades activas todavía</td></tr>';
+      return;
+    }
+    tbody.innerHTML = props.map(p => {
+      const date = new Date(p.created_at);
+      const dateLabel = isNaN(date.getTime()) ? '-' : date.toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' });
+      return `
+        <tr>
+          <td>#${p.id}</td>
+          <td><a href="/propiedad/${p.id}" target="_blank" style="color:#7fa0e8;text-decoration:none">${p.titulo || 'Sin título'}</a></td>
+          <td>${p.precio || '-'}</td>
+          <td>${p.ubicacion || '-'}</td>
+          <td>${dateLabel}</td>
+        </tr>
+      `;
+    }).join('');
+  } catch (e) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px">No se pudo cargar la lista</td></tr>';
+  }
+}
+
 /* ── Perfil ───────────────────────── */
 async function guardarPerfil() {
   const payload = {
     nombre:        document.getElementById('p_nombre').value.trim(),
     whatsapp:      document.getElementById('p_whatsapp').value.trim(),
     form_url:      document.getElementById('p_form').value.trim(),
-    netlify_token: document.getElementById('p_netlify').value.trim(),
   };
   const res = await fetch('/api/perfil', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
   if (res.ok) {
@@ -874,6 +923,10 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') { cerrarModal(); cerrarModalReset(); closeSidebar(); }
 });
 {% endif %}
+
+window.addEventListener('DOMContentLoaded', () => {
+  cargarPropiedadesActivas();
+});
 </script>
 </body>
 </html>
