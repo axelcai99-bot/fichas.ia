@@ -429,6 +429,9 @@ body {
     </button>
 
     <div class="sb-section">Cuenta</div>
+    <button class="nav-btn" onclick="showPanel('clientes', this); cargarClientes()">
+      <span class="nav-icon">🗂️</span> Clientes
+    </button>
     <button class="nav-btn" onclick="showPanel('perfil', this)">
       <span class="nav-icon">⚙️</span> Mi perfil
     </button>
@@ -530,14 +533,23 @@ body {
             <span class="card-label" style="padding-bottom:0;margin-bottom:0;border-bottom:none">Propiedades activas</span>
             <p class="note">Fichas disponibles actualmente en el sistema local</p>
           </div>
-          <button class="btn btn-ghost" style="padding:8px 12px" onclick="cargarPropiedadesActivas()">Recargar</button>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <select class="input" id="portal-filter" style="min-width:170px;padding:8px 10px" onchange="cargarPropiedadesActivas()">
+              <option value="">Todos los portales</option>
+              <option value="zonaprop">ZonaProp</option>
+              <option value="argenprop">Argenprop</option>
+              <option value="mercadolibre">MercadoLibre</option>
+            </select>
+            <button class="btn btn-ghost" style="padding:8px 12px" onclick="cargarPropiedadesActivas()">Recargar</button>
+          </div>
         </div>
         <div style="overflow-x:auto">
           <table class="user-table">
             <thead>
               <tr>
-                <th>ID</th>
+                <th>N°</th>
                 <th>Propiedad</th>
+                <th>Portal</th>
                 <th>Precio</th>
                 <th>Ubicación</th>
                 <th>Creada</th>
@@ -545,7 +557,98 @@ body {
               </tr>
             </thead>
             <tbody id="properties-body">
-              <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px">Cargando propiedades...</td></tr>
+              <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:24px">Cargando propiedades...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── CLIENTES ───────────────────────────────────── -->
+    <div class="panel" id="panel-clientes">
+      <div class="card" style="margin-bottom:14px">
+        <span class="card-label">Nuevo cliente</span>
+        <div class="field-grid">
+          <div class="field"><span class="field-label">Nombre</span><input class="input" id="c_nombre" type="text" placeholder="Nombre y apellido" oninput="normalizarNombreCliente(this)"></div>
+          <div class="field"><span class="field-label">Teléfono</span><input class="input" id="c_telefono" type="text" inputmode="numeric" placeholder="11..." oninput="normalizarTelefonoCliente(this)"></div>
+          <div class="field"><span class="field-label">Presupuesto</span><input class="input" id="c_presupuesto" type="text" inputmode="numeric" placeholder="100.000" oninput="normalizarPresupuestoCliente(this)"></div>
+          <div class="field"><span class="field-label">Tipo</span>
+            <button type="button" class="input" id="c_tipo_btn" style="text-align:left" onclick="toggleTipoMenu()">Seleccionar tipo</button>
+            <div id="c_tipo_menu" style="display:none;margin-top:8px;padding:10px;border:1px solid var(--border2);border-radius:8px;background:var(--bg)">
+              <div style="display:flex;gap:10px;flex-wrap:wrap">
+                <label><input type="checkbox" name="c_tipo" value="depto" onchange="refreshTipoLabel()">Depto</label>
+                <label><input type="checkbox" name="c_tipo" value="ph" onchange="refreshTipoLabel()">PH</label>
+                <label><input type="checkbox" name="c_tipo" value="casa" onchange="refreshTipoLabel()">Casa</label>
+                <label><input type="checkbox" name="c_tipo" value="otro" onchange="refreshTipoLabel()">Otro</label>
+              </div>
+            </div>
+          </div>
+          <div class="field"><span class="field-label">Ambientes</span>
+            <button type="button" class="input" id="c_ambientes_btn" style="text-align:left" onclick="toggleAmbientesMenu()">Seleccionar ambientes</button>
+            <div id="c_ambientes_menu" style="display:none;margin-top:8px;padding:10px;border:1px solid var(--border2);border-radius:8px;background:var(--bg)">
+              <div style="display:flex;gap:10px;flex-wrap:wrap">
+                <label><input type="checkbox" name="c_ambientes" value="1" onchange="refreshAmbientesLabel()">1</label>
+                <label><input type="checkbox" name="c_ambientes" value="2" onchange="refreshAmbientesLabel()">2</label>
+                <label><input type="checkbox" name="c_ambientes" value="3" onchange="refreshAmbientesLabel()">3</label>
+                <label><input type="checkbox" name="c_ambientes" value="4" onchange="refreshAmbientesLabel()">4</label>
+                <label><input type="checkbox" name="c_ambientes" value="5" onchange="refreshAmbientesLabel()">5</label>
+                <label><input type="checkbox" name="c_ambientes" value="6" onchange="refreshAmbientesLabel()">6</label>
+                <label><input type="checkbox" name="c_ambientes" value="7" onchange="refreshAmbientesLabel()">7</label>
+                <label><input type="checkbox" name="c_ambientes" value="8" onchange="refreshAmbientesLabel()">8</label>
+                <label><input type="checkbox" name="c_ambientes" value="9" onchange="refreshAmbientesLabel()">9</label>
+                <label><input type="checkbox" name="c_ambientes" value="10" onchange="refreshAmbientesLabel()">10</label>
+              </div>
+            </div>
+          </div>
+          <div class="field"><span class="field-label">Apto crédito</span>
+            <select class="input" id="c_apto_credito">
+              <option value="si">Sí</option>
+              <option value="no">No</option>
+            </select>
+          </div>
+        </div>
+        <div class="field-grid one mt-4">
+          <div class="field"><span class="field-label">Zonas de búsqueda</span>
+            <input class="input" id="c_zonas_search" type="text" placeholder="Escribí una zona..." oninput="renderZonasSugeridas(this.value)">
+            <div id="c_zonas_sugeridas" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"></div>
+            <div id="c_zonas_selected" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"></div>
+          </div>
+          <div class="field"><span class="field-label">Situación</span><input class="input" id="c_situacion" type="text" placeholder="Buscando, visita agendada, oferta..."></div>
+          <div class="field"><span class="field-label">Notas resumidas</span><textarea class="input" id="c_notas_resumidas" rows="3" placeholder="Observaciones clave..."></textarea></div>
+        </div>
+        <div class="btn-row mt-4">
+          <button class="btn btn-primary" id="btn-cliente-guardar" onclick="guardarCliente()">Guardar cliente</button>
+          <button class="btn btn-ghost" onclick="limpiarFormularioCliente()">Limpiar</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="admin-head" style="margin-bottom:12px">
+          <div>
+            <span class="card-label" style="padding-bottom:0;margin-bottom:0;border-bottom:none">Clientes del agente</span>
+            <p class="note">Listado personal por usuario</p>
+          </div>
+          <button class="btn btn-ghost" style="padding:8px 12px" onclick="cargarClientes()">Recargar</button>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="user-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Nombre</th>
+                <th>Teléfono</th>
+                <th>Presupuesto</th>
+                <th>Tipo</th>
+                <th>Ambientes</th>
+                <th>Apto crédito</th>
+                <th>Zonas</th>
+                <th>Situación</th>
+                <th>Notas</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="clients-body">
+              <tr><td colspan="11" style="text-align:center;color:var(--muted);padding:24px">Sin datos todavía</td></tr>
             </tbody>
           </table>
         </div>
@@ -676,14 +779,28 @@ body {
 <script>
 let currentUrl = null;
 let resetTarget = null;
+let editingClientId = null;
+let CLIENTS_CACHE = [];
+const CURRENT_USERNAME = {{ username|tojson }};
 
 const PANELS = {
   generar:  ['Generador de Fichas',  'Pegá el link y en minutos tenés la ficha lista'],
   propiedades: ['Propiedades activas', 'Listado de fichas generadas en local'],
+  clientes: ['Clientes', 'Agenda y seguimiento comercial'],
   perfil:   ['Mi Perfil',            'Configurá tus datos de contacto'],
   pass:     ['Contraseña',           'Actualizá tu contraseña de acceso'],
   usuarios: ['Usuarios',             'Gestioná las cuentas de tus agentes'],
 };
+const ZONAS_OPTIONS = [
+  'agronomia','almagro','balvanera','barracas','belgrano','boedo','caballito','chacarita','coghlan','colegiales',
+  'constitucion','flores','floresta','la boca','la paternal','liniers','mataderos','monserrat','monte castro',
+  'nunez','palermo','parque avellaneda','parque chacabuco','parque chas','parque patricios','puerto madero',
+  'recoleta','retiro','saavedra','san cristobal','san nicolas','san telmo','velez sarsfield','versalles',
+  'villa crespo','villa del parque','villa devoto','villa general mitre','villa lugano','villa luro',
+  'villa ortuzar','villa pueyrredon','villa real','villa riachuelo','villa santa rita','villa soldati','villa urquiza',
+  'olivos','vicente lopez','la lucila','martinez','san isidro','acassuso','beccar','munro','florida','carapachay','villa adelina'
+];
+const ZONAS_SELECTED = new Set();
 
 /* ── Sidebar mobile ──────────────── */
 function toggleSidebar() {
@@ -807,20 +924,24 @@ async function cargarPropiedadesActivas() {
   const tbody = document.getElementById('properties-body');
   if (!tbody) return;
   try {
-    const res = await fetch('/propiedades');
+    const portal = document.getElementById('portal-filter')?.value || '';
+    const q = portal ? `?portal=${encodeURIComponent(portal)}` : '';
+    const res = await fetch('/propiedades' + q);
     if (!res.ok) throw new Error('error');
     const props = await res.json();
     if (!props.length) {
-      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px">No hay propiedades activas todavía</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:24px">No hay propiedades activas todavía</td></tr>';
       return;
     }
-    tbody.innerHTML = props.map(p => {
+    tbody.innerHTML = props.map((p, idx) => {
       const date = new Date(p.created_at);
       const dateLabel = isNaN(date.getTime()) ? '-' : date.toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' });
+      const portal = p.source_portal || '-';
       return `
         <tr>
-          <td>#${p.id}</td>
+          <td>${props.length - idx}</td>
           <td><a href="/propiedad/${p.id}" target="_blank" style="color:#7fa0e8;text-decoration:none">${p.titulo || 'Sin título'}</a></td>
+          <td style="text-transform:capitalize">${portal}</td>
           <td>${p.precio || '-'}</td>
           <td>${p.ubicacion || '-'}</td>
           <td>${dateLabel}</td>
@@ -831,7 +952,7 @@ async function cargarPropiedadesActivas() {
       `;
     }).join('');
   } catch (e) {
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px">No se pudo cargar la lista</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:24px">No se pudo cargar la lista</td></tr>';
   }
 }
 
@@ -849,6 +970,218 @@ async function eliminarPropiedad(id) {
     cargarPropiedadesActivas();
   } catch (e) {
     toast('Error de red al eliminar', 'err');
+  }
+}
+
+/* ── Clientes ─────────────────────── */
+function normalizarNombreCliente(input) {
+  input.value = (input.value || '').replace(/[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ ]/g, '').replace(/\s+/g, ' ');
+}
+
+function normalizarTelefonoCliente(input) {
+  input.value = (input.value || '').replace(/\D/g, '');
+}
+
+function normalizarPresupuestoCliente(input) {
+  const digits = (input.value || '').replace(/\D/g, '');
+  if (!digits) { input.value = ''; return; }
+  input.value = digits.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+}
+
+function obtenerChecks(name) {
+  return Array.from(document.querySelectorAll(`input[name="${name}"]:checked`)).map(el => el.value);
+}
+
+function toggleTipoMenu() {
+  const menu = document.getElementById('c_tipo_menu');
+  if (!menu) return;
+  menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+}
+
+function refreshTipoLabel() {
+  const values = obtenerChecks('c_tipo');
+  const btn = document.getElementById('c_tipo_btn');
+  if (!btn) return;
+  btn.textContent = values.length ? `Tipo: ${values.join(', ')}` : 'Seleccionar tipo';
+}
+
+function toggleAmbientesMenu() {
+  const menu = document.getElementById('c_ambientes_menu');
+  if (!menu) return;
+  menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+}
+
+function refreshAmbientesLabel() {
+  const values = obtenerChecks('c_ambientes');
+  const btn = document.getElementById('c_ambientes_btn');
+  if (!btn) return;
+  btn.textContent = values.length ? `Ambientes: ${values.join(', ')}` : 'Seleccionar ambientes';
+}
+
+function renderZonasSugeridas(filter = '') {
+  const q = (filter || '').trim().toLowerCase();
+  const box = document.getElementById('c_zonas_sugeridas');
+  if (!box) return;
+  if (!q) { box.innerHTML = ''; return; }
+  const items = ZONAS_OPTIONS.filter(z => z.includes(q) && !ZONAS_SELECTED.has(z)).slice(0, 14);
+  box.innerHTML = items.map(z =>
+    `<button type="button" class="btn btn-ghost" style="padding:5px 9px;font-size:12px" onclick="agregarZonaBusqueda('${z}')">${z}</button>`
+  ).join('');
+}
+
+function renderZonasSeleccionadas() {
+  const box = document.getElementById('c_zonas_selected');
+  if (!box) return;
+  box.innerHTML = Array.from(ZONAS_SELECTED).map(z =>
+    `<span class="badge badge-user" style="gap:6px">${z} <button type="button" style="background:none;border:none;color:inherit;cursor:pointer" onclick="quitarZonaBusqueda('${z}')">✕</button></span>`
+  ).join('');
+}
+
+function agregarZonaBusqueda(zona) {
+  if (!zona) return;
+  ZONAS_SELECTED.add(zona.toLowerCase());
+  renderZonasSeleccionadas();
+  renderZonasSugeridas(document.getElementById('c_zonas_search')?.value || '');
+}
+
+function quitarZonaBusqueda(zona) {
+  ZONAS_SELECTED.delete((zona || '').toLowerCase());
+  renderZonasSeleccionadas();
+  renderZonasSugeridas(document.getElementById('c_zonas_search')?.value || '');
+}
+
+function _payloadCliente() {
+  const tipos = obtenerChecks('c_tipo');
+  const ambientes = obtenerChecks('c_ambientes');
+  const zonas = Array.from(ZONAS_SELECTED);
+  return {
+    nombre: document.getElementById('c_nombre').value.trim(),
+    telefono: document.getElementById('c_telefono').value.trim(),
+    presupuesto: document.getElementById('c_presupuesto').value.trim(),
+    tipo: tipos.join(', '),
+    ambientes: ambientes.join(', '),
+    apto_credito: document.getElementById('c_apto_credito').value === 'si',
+    zonas_busqueda: zonas.join(', '),
+    notas_resumidas: document.getElementById('c_notas_resumidas').value.trim(),
+    situacion: document.getElementById('c_situacion').value.trim(),
+  };
+}
+
+function limpiarFormularioCliente() {
+  editingClientId = null;
+  document.getElementById('btn-cliente-guardar').textContent = 'Guardar cliente';
+  ['c_nombre','c_telefono','c_presupuesto','c_notas_resumidas','c_situacion','c_zonas_search']
+    .forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.value = '';
+    });
+  document.querySelectorAll('input[name="c_tipo"], input[name="c_ambientes"]').forEach(el => { el.checked = false; });
+  document.getElementById('c_tipo_menu').style.display = 'none';
+  document.getElementById('c_ambientes_menu').style.display = 'none';
+  refreshTipoLabel();
+  refreshAmbientesLabel();
+  ZONAS_SELECTED.clear();
+  renderZonasSeleccionadas();
+  renderZonasSugeridas(document.getElementById('c_zonas_search')?.value || '');
+  document.getElementById('c_apto_credito').value = 'si';
+}
+
+async function guardarCliente() {
+  const payload = _payloadCliente();
+  if (!payload.nombre) { toast('Nombre requerido', 'err'); return; }
+  if (!/^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ ]+$/.test(payload.nombre)) { toast('Nombre solo letras', 'err'); return; }
+  if (!payload.telefono || !/^\d{8,15}$/.test(payload.telefono)) { toast('Teléfono solo números (8 a 15)', 'err'); return; }
+  if (!payload.tipo) { toast('Seleccioná al menos un tipo', 'err'); return; }
+  if (payload.ambientes && !/^((10|[1-9])(,\s*(10|[1-9]))*)$/.test(payload.ambientes)) { toast('Ambientes: solo 1 a 10', 'err'); return; }
+  if (!payload.zonas_busqueda) { toast('Seleccioná al menos una zona', 'err'); return; }
+  const url = editingClientId ? `/api/clientes/${editingClientId}` : '/api/clientes';
+  const method = editingClientId ? 'PUT' : 'POST';
+  const res = await fetch(url, {
+    method,
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(payload),
+  });
+  if (res.ok) {
+    toast(editingClientId ? 'Cliente actualizado' : 'Cliente creado');
+    limpiarFormularioCliente();
+    cargarClientes();
+  } else {
+    const d = await res.json().catch(() => ({}));
+    toast(d.error || 'Error al guardar cliente', 'err');
+  }
+}
+
+async function cargarClientes() {
+  const tbody = document.getElementById('clients-body');
+  if (!tbody) return;
+  const res = await fetch('/api/clientes');
+  if (!res.ok) {
+    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:24px">No se pudo cargar</td></tr>';
+    return;
+  }
+  const clients = await res.json();
+  CLIENTS_CACHE = Array.isArray(clients) ? clients : [];
+  if (!CLIENTS_CACHE.length) {
+    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:24px">Sin clientes todavía</td></tr>';
+    return;
+  }
+  tbody.innerHTML = CLIENTS_CACHE.map((c, idx) => `
+    <tr>
+      <td>#${c.id}</td>
+      <td><strong>${c.nombre || '-'}</strong></td>
+      <td>${c.telefono || '-'}</td>
+      <td>${c.presupuesto || '-'}</td>
+      <td style="text-transform:capitalize">${c.tipo || '-'}</td>
+      <td>${c.ambientes || '-'}</td>
+      <td>${c.apto_credito ? 'Sí' : 'No'}</td>
+      <td>${c.zonas_busqueda || '-'}</td>
+      <td>${c.situacion || '-'}</td>
+      <td>${c.notas_resumidas || '-'}</td>
+      <td>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-ghost" style="padding:6px 10px;font-size:12px" onclick="editarCliente(${idx})">Editar</button>
+          <button class="btn btn-danger" style="padding:6px 10px;font-size:12px" onclick="eliminarCliente(${c.id})">Borrar</button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function editarCliente(idx) {
+  const c = CLIENTS_CACHE[idx];
+  if (!c) return;
+  editingClientId = c.id;
+  document.getElementById('btn-cliente-guardar').textContent = 'Actualizar cliente';
+  document.getElementById('c_nombre').value = c.nombre || '';
+  document.getElementById('c_telefono').value = c.telefono || '';
+  document.getElementById('c_presupuesto').value = c.presupuesto || '';
+  const tiposSet = new Set((c.tipo || '').split(',').map(x => x.trim().toLowerCase()).filter(Boolean));
+  const ambSet = new Set((c.ambientes || '').split(',').map(x => x.trim()).filter(Boolean));
+  document.querySelectorAll('input[name="c_tipo"]').forEach(el => { el.checked = tiposSet.has((el.value || '').toLowerCase()); });
+  document.querySelectorAll('input[name="c_ambientes"]').forEach(el => { el.checked = ambSet.has((el.value || '').trim()); });
+  refreshTipoLabel();
+  refreshAmbientesLabel();
+  document.getElementById('c_apto_credito').value = c.apto_credito ? 'si' : 'no';
+  ZONAS_SELECTED.clear();
+  (c.zonas_busqueda || '').split(',').map(x => x.trim().toLowerCase()).filter(Boolean).forEach(z => ZONAS_SELECTED.add(z));
+  renderZonasSeleccionadas();
+  renderZonasSugeridas(document.getElementById('c_zonas_search')?.value || '');
+  document.getElementById('c_notas_resumidas').value = c.notas_resumidas || '';
+  document.getElementById('c_situacion').value = c.situacion || '';
+  showPanel('clientes');
+}
+
+async function eliminarCliente(id) {
+  if (!confirm('¿Eliminar cliente?')) return;
+  const res = await fetch(`/api/clientes/${id}`, { method: 'DELETE' });
+  if (res.ok) {
+    toast('Cliente eliminado');
+    if (editingClientId === id) limpiarFormularioCliente();
+    cargarClientes();
+  } else {
+    const d = await res.json().catch(() => ({}));
+    toast(d.error || 'No se pudo eliminar cliente', 'err');
   }
 }
 
@@ -898,6 +1231,7 @@ async function cargarUsuarios() {
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           ${u.username !== 'admin' ? `<button class="btn btn-ghost" style="padding:6px 10px;font-size:12px" onclick="toggleUser('${u.username}')">${u.active ? 'Desactivar' : 'Activar'}</button>` : ''}
           <button class="btn btn-ghost" style="padding:6px 10px;font-size:12px" onclick="abrirReset('${u.username}')">Reset pass</button>
+          ${u.username !== 'admin' && u.username !== CURRENT_USERNAME ? `<button class="btn btn-danger" style="padding:6px 10px;font-size:12px" onclick="borrarUsuario('${u.username}')">Borrar</button>` : ''}
         </div>
       </td>
     </tr>
@@ -943,6 +1277,22 @@ async function confirmarReset() {
   else { const d = await res.json(); toast(d.error || 'Error', 'err'); }
 }
 
+async function borrarUsuario(username) {
+  if (!confirm(`¿Borrar usuario "${username}"? Esta acción no se puede deshacer.`)) return;
+  const res = await fetch('/api/admin/delete_usuario', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ username }),
+  });
+  if (res.ok) {
+    toast('Usuario borrado');
+    cargarUsuarios();
+  } else {
+    const d = await res.json().catch(() => ({}));
+    toast(d.error || 'Error al borrar usuario', 'err');
+  }
+}
+
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') { cerrarModal(); cerrarModalReset(); closeSidebar(); }
 });
@@ -950,6 +1300,10 @@ document.addEventListener('keydown', e => {
 
 window.addEventListener('DOMContentLoaded', () => {
   cargarPropiedadesActivas();
+  cargarClientes();
+  refreshTipoLabel();
+  refreshAmbientesLabel();
+  renderZonasSugeridas(document.getElementById('c_zonas_search')?.value || '');
 });
 </script>
 </body>
