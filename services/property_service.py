@@ -1,5 +1,6 @@
 import os
 import re
+import shutil
 import urllib.request
 from typing import Any
 
@@ -71,6 +72,20 @@ class PropertyService:
             log("No se pudieron descargar imagenes, se mostraran placeholders")
             saved = [self._placeholder_svg_url()] * 5
         return saved
+
+    def delete_property(self, property_id: int) -> bool:
+        deleted = self.property_repo.delete_property(property_id)
+        if not deleted:
+            return False
+
+        target_dir = os.path.join(self.base_dir, "static", "properties", str(property_id))
+        try:
+            if os.path.isdir(target_dir):
+                shutil.rmtree(target_dir)
+        except Exception:
+            # Si falla el borrado de imagenes no bloqueamos la eliminacion en BD.
+            pass
+        return True
 
     @staticmethod
     def _guess_ext(url: str) -> str:
