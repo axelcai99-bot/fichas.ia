@@ -95,3 +95,9 @@ class UserRepository:
             )
             conn.commit()
             return bool(new_active)
+
+    def delete_user(self, username: str) -> bool:
+        with get_connection() as conn:
+            cur = conn.execute("DELETE FROM users WHERE username = ?", (username,))
+            conn.commit()
+            return cur.rowcount > 0
