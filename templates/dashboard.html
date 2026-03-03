@@ -888,11 +888,21 @@ function escucharLogs(jobId) {
       cargarPropiedadesActivas();
     }
   });
-  es.addEventListener('error', () => {
+  es.addEventListener('failed', e => {
     es.close();
-    logBox.textContent += '\n❌ Error\n';
+    const errMsg = (e && e.data ? e.data : 'Error inesperado');
+    logBox.textContent += `\n❌ ${errMsg}\n`;
     document.getElementById('log-spinner').style.display = 'none';
     document.getElementById('log-status').textContent = '✗ Error';
+    toast(errMsg, 'err');
+    resetBtn();
+  });
+  es.addEventListener('error', () => {
+    es.close();
+    logBox.textContent += '\n❌ Error de conexión con el servidor\n';
+    document.getElementById('log-spinner').style.display = 'none';
+    document.getElementById('log-status').textContent = '✗ Error';
+    toast('Se perdió la conexión con el servidor', 'err');
     resetBtn();
   });
 }
