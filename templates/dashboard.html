@@ -273,6 +273,13 @@ body {
 .btn-ghost { background: var(--surface2); color: var(--text); border: 1px solid var(--border2); }
 .btn-ghost:hover { background: var(--border); }
 
+.btn-danger {
+  background: rgba(201,57,44,0.16);
+  color: #ff9a92;
+  border: 1px solid rgba(201,57,44,0.35);
+}
+.btn-danger:hover:not(:disabled) { background: rgba(201,57,44,0.25); }
+
 .btn-green { background: var(--green); color: white; }
 .btn-green:hover:not(:disabled) { background: #1aab50; transform: translateY(-1px); }
 
@@ -534,10 +541,11 @@ body {
                 <th>Precio</th>
                 <th>Ubicación</th>
                 <th>Creada</th>
+                <th>Acciones</th>
               </tr>
             </thead>
             <tbody id="properties-body">
-              <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px">Cargando propiedades...</td></tr>
+              <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px">Cargando propiedades...</td></tr>
             </tbody>
           </table>
         </div>
@@ -596,11 +604,7 @@ body {
     <!-- ── USUARIOS (admin) ───────────────────────────── -->
     {% if is_admin %}
     <div class="panel" id="panel-usuarios">
-      <div class="admin-head">
-        <div>
-          <h2>Usuarios</h2>
-          <p>Gestioná las cuentas de tus agentes</p>
-        </div>
+      <div class="admin-head" style="justify-content:flex-start">
         <button class="btn btn-primary" onclick="abrirModalCrear()">+ Nuevo usuario</button>
       </div>
       <div class="card" style="overflow-x:auto">
@@ -807,7 +811,7 @@ async function cargarPropiedadesActivas() {
     if (!res.ok) throw new Error('error');
     const props = await res.json();
     if (!props.length) {
-      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px">No hay propiedades activas todavía</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px">No hay propiedades activas todavía</td></tr>';
       return;
     }
     tbody.innerHTML = props.map(p => {
@@ -820,11 +824,31 @@ async function cargarPropiedadesActivas() {
           <td>${p.precio || '-'}</td>
           <td>${p.ubicacion || '-'}</td>
           <td>${dateLabel}</td>
+          <td>
+            <button class="btn btn-danger" style="padding:6px 10px;font-size:12px" onclick="eliminarPropiedad(${p.id})">🗑</button>
+          </td>
         </tr>
       `;
     }).join('');
   } catch (e) {
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px">No se pudo cargar la lista</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px">No se pudo cargar la lista</td></tr>';
+  }
+}
+
+async function eliminarPropiedad(id) {
+  const ok = confirm('¿Eliminar esta propiedad? Esta acción no se puede deshacer.');
+  if (!ok) return;
+  try {
+    const res = await fetch(`/api/propiedades/${id}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      toast(data.error || 'No se pudo borrar la propiedad', 'err');
+      return;
+    }
+    toast('Propiedad eliminada');
+    cargarPropiedadesActivas();
+  } catch (e) {
+    toast('Error de red al eliminar', 'err');
   }
 }
 
