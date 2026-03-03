@@ -3,6 +3,8 @@ import queue
 import threading
 import urllib.parse
 import uuid
+import json
+import time
 from functools import wraps
 
 from flask import (
@@ -39,6 +41,20 @@ scraper_service = ScraperService()
 property_service = PropertyService(property_repo, base_dir=BASE_DIR)
 
 JOBS: dict = {}
+
+def _debug_log(run_id: str, hypothesis_id: str, location: str, message: str, data: dict) -> None:
+    payload = {
+        "sessionId": "5ab736",
+        "runId": run_id,
+        "hypothesisId": hypothesis_id,
+        "location": location,
+        "message": message,
+        "data": data,
+        "timestamp": int(time.time() * 1000),
+    }
+    log_path = os.path.join(BASE_DIR, "debug-5ab736.log")
+    with open(log_path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(payload, ensure_ascii=False) + "\n")
 
 
 def get_user(username: str):
@@ -190,10 +206,25 @@ def reset_password():
 @app.route("/api/generar", methods=["POST"])
 @login_required
 def generar():
+    run_id = f"run-{int(time.time() * 1000)}"
     username = session["username"]
     user = get_user(username)
     data = request.json or {}
     url_prop = data.get("url", "").strip()
+    # region agent log
+    _debug_log(
+        run_id=run_id,
+        hypothesis_id="H6",
+        location="app.py:generar",
+        message="API generar called",
+        data={
+            "username": username,
+            "has_url": bool(url_prop),
+            "base_dir": BASE_DIR,
+            "cwd": os.getcwd(),
+        },
+    )
+    # endregion
     if not url_prop:
         return jsonify({"error": "Falta el link"}), 400
 
@@ -212,7 +243,7 @@ def generar():
 
     threading.Thread(
         target=_run_generation,
-        args=(job_id, url_prop, nombre, whatsapp, form_url),
+        args=(job_id, url_prop, nombre, whatsapp, form_url, run_id),
         daemon=True,
     ).start()
     return jsonify({"job_id": job_id})
@@ -291,6 +322,15 @@ def properties_list():
     return jsonify(items)
 
 
+@app.route("/api/propiedades/<int:property_id>", methods=["DELETE"])
+@login_required
+def delete_property(property_id: int):
+    deleted = property_service.delete_property(property_id)
+    if not deleted:
+        return jsonify({"error": "Propiedad no encontrada"}), 404
+    return jsonify({"ok": True})
+
+
 def _merge_features(caracteristicas: list[str], detalles: dict) -> list[str]:
     seen: dict[str, str] = {}
     for c in (caracteristicas or []):
@@ -310,14 +350,24 @@ def _merge_features(caracteristicas: list[str], detalles: dict) -> list[str]:
     return merged
 
 
-def _run_generation(job_id, source_url, agent_name, agent_whatsapp, form_url):
+def _run_generation(job_id, source_url, agent_name, agent_whatsapp, form_url, run_id: str | None = None):
     job = JOBS[job_id]
     q = job["queue"]
+    run_id = run_id or f"run-{int(time.time() * 1000)}"
 
     def log(msg: str):
         q.put(msg)
 
     try:
+        # region agent log
+        _debug_log(
+            run_id=run_id,
+            hypothesis_id="H7",
+            location="app.py:_run_generation:start",
+            message="Background generation started",
+            data={"job_id": job_id, "source_url_prefix": (source_url or "")[:120]},
+        )
+        # endregion
         scraped = scraper_service.scrape_property(source_url, log)
         property_id = property_service.save_scraped_property(
             source_url=source_url,
@@ -332,6 +382,15 @@ def _run_generation(job_id, source_url, agent_name, agent_whatsapp, form_url):
         log("Proceso completado")
         q.put("__DONE__")
     except Exception as e:
+        # region agent log
+        _debug_log(
+            run_id=run_id,
+            hypothesis_id="H7",
+            location="app.py:_run_generation:except",
+            message="Background generation exception",
+            data={"error_type": type(e).__name__, "error": str(e)[:300]},
+        )
+        # endregion
         log(f"Error: {e}")
         job["status"] = "error"
         q.put("__ERROR__")
