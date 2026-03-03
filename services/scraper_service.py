@@ -12,6 +12,9 @@ class ScraperService:
             try:
                 return self._scrape_once(source_url, portal, log)
             except Exception as e:
+                if portal == "zonaprop" and self._is_antibot_error(e):
+                    log("ZonaProp bloqueo el acceso con anti-bot. Se generara una ficha basica.")
+                    return self._build_fallback_scraped(source_url, portal, str(e))
                 if self._is_window_closed_error(e) and attempt < max_attempts:
                     log("El navegador se cerro inesperadamente. Reintentando...")
                     time.sleep(1.5)
@@ -86,6 +89,48 @@ class ScraperService:
             "chrome not reachable",
         ]
         return any(p in text for p in patterns)
+
+    @staticmethod
+    def _is_antibot_error(err: Exception) -> bool:
+        text = str(err).lower()
+        patterns = [
+            "proteccion anti-bot",
+            "just a moment",
+            "security verification",
+            "captcha",
+        ]
+        return any(p in text for p in patterns)
+
+    def _build_fallback_scraped(self, source_url: str, portal: str, reason: str) -> dict[str, Any]:
+        title = self._guess_title_from_url(source_url) or "Propiedad en Venta"
+        descripcion = (
+            "No se pudo extraer automaticamente por proteccion anti-bot del portal. "
+            "Revisa el aviso original para completar los datos faltantes."
+        )
+        return {
+            "titulo": title,
+            "precio": "Consultar precio",
+            "ubicacion": "Ver en el portal",
+            "descripcion": descripcion,
+            "detalles": {},
+            "caracteristicas": [],
+            "info_adicional": {"aviso": f"fallback_antibot:{reason[:120]}"},
+            "image_urls": [],
+            "source_portal": portal,
+        }
+
+    @staticmethod
+    def _guess_title_from_url(source_url: str) -> str:
+        try:
+            path = urllib.parse.urlparse(source_url).path or ""
+            slug = urllib.parse.unquote(path).rstrip("/").rsplit("/", 1)[-1]
+        except Exception:
+            return ""
+        slug = re.sub(r"\.(?:html?|php)$", "", slug, flags=re.I)
+        slug = re.sub(r"-\d{5,}$", "", slug)
+        slug = re.sub(r"[_-]+", " ", slug)
+        slug = re.sub(r"\s+", " ", slug).strip()
+        return slug[:100].capitalize() if slug else ""
 
     def _warm_page(self, sb) -> None:
         sb.execute_script("window.scrollTo(0, document.body.scrollHeight * 0.3)")

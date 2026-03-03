@@ -142,6 +142,16 @@ def _sanitize_client_payload(data: dict) -> tuple[bool, dict | str]:
     }
 
 
+def _format_error_message(err: Exception) -> str:
+    text = re.sub(r"\s+", " ", str(err or "").strip())
+    text = re.sub(r"\s*Stacktrace:.*$", "", text, flags=re.I)
+    if not text:
+        return "Error inesperado al generar la ficha"
+    if len(text) > 220:
+        return text[:220].rstrip() + "..."
+    return text
+
+
 def login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
@@ -333,6 +343,7 @@ def generar():
         "queue": log_queue,
         "status": "running",
         "result_url": None,
+        "error_message": None,
         "user": username,
     }
 
@@ -360,7 +371,8 @@ def stream(job_id):
                     yield f"event: done\ndata: {result}\n\n"
                     break
                 if msg == "__ERROR__":
-                    yield "event: error\ndata: Error\n\n"
+                    error_msg = (job.get("error_message") or "Error inesperado").replace("\n", " ")
+                    yield f"event: failed\ndata: {error_msg}\n\n"
                     break
                 yield f"data: {msg.replace(chr(10), ' ')}\n\n"
             except queue.Empty:
@@ -535,8 +547,10 @@ def _run_generation(job_id, source_url, agent_name, agent_whatsapp, form_url, ru
             data={"error_type": type(e).__name__, "error": str(e)[:300]},
         )
         # endregion
-        log(f"Error: {e}")
+        friendly_error = _format_error_message(e)
+        log(f"Error: {friendly_error}")
         job["status"] = "error"
+        job["error_message"] = friendly_error
         q.put("__ERROR__")
 
 
