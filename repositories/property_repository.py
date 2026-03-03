@@ -98,3 +98,14 @@ class PropertyRepository:
             }
             for r in rows
         ]
+
+    def delete_property(self, property_id: int) -> bool:
+        with get_connection() as conn:
+            cur = conn.execute("DELETE FROM properties WHERE id = ?", (property_id,))
+            if cur.rowcount > 0:
+                remaining = conn.execute("SELECT COUNT(*) AS total FROM properties").fetchone()
+                if remaining and int(remaining["total"]) == 0:
+                    # Reinicia el AUTOINCREMENT para que la próxima propiedad arranque en 1.
+                    conn.execute("DELETE FROM sqlite_sequence WHERE name = 'properties'")
+            conn.commit()
+            return cur.rowcount > 0
