@@ -1,121 +1,30 @@
-import importlib.util
-import json
-import os
+import urllib.parse
 import re
-import sys
 import time
 from typing import Callable, Any
 
 
 class ScraperService:
-    def _debug_log(self, run_id: str, hypothesis_id: str, location: str, message: str, data: dict[str, Any]) -> None:
-        payload = {
-            "sessionId": "5ab736",
-            "runId": run_id,
-            "hypothesisId": hypothesis_id,
-            "location": location,
-            "message": message,
-            "data": data,
-            "timestamp": int(time.time() * 1000),
-        }
-        log_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "debug-5ab736.log")
-        with open(log_path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(payload, ensure_ascii=False) + "\n")
-
     def scrape_property(self, source_url: str, log: Callable[[str], None]) -> dict[str, Any]:
-        run_id = f"run-{int(time.time() * 1000)}"
-        # region agent log
-        self._debug_log(
-            run_id=run_id,
-            hypothesis_id="H1",
-            location="services/scraper_service.py:scrape_property",
-            message="Scrape entrypoint",
-            data={
-                "source_url_prefix": (source_url or "")[:120],
-                "python_executable": sys.executable,
-                "seleniumbase_spec_found": bool(importlib.util.find_spec("seleniumbase")),
-            },
-        )
-        # endregion
+        portal = self._detect_portal(source_url)
         max_attempts = 2
         for attempt in range(1, max_attempts + 1):
             try:
-                return self._scrape_once(source_url, log)
+                return self._scrape_once(source_url, portal, log)
             except Exception as e:
-                # region agent log
-                self._debug_log(
-                    run_id=run_id,
-                    hypothesis_id="H4",
-                    location="services/scraper_service.py:scrape_property:except",
-                    message="Scrape attempt exception",
-                    data={
-                        "attempt": attempt,
-                        "max_attempts": max_attempts,
-                        "error_type": type(e).__name__,
-                        "error": str(e)[:300],
-                    },
-                )
-                # endregion
                 if self._is_window_closed_error(e) and attempt < max_attempts:
                     log("El navegador se cerro inesperadamente. Reintentando...")
                     time.sleep(1.5)
                     continue
                 raise
 
-    def _scrape_once(self, source_url: str, log: Callable[[str], None]) -> dict[str, Any]:
-        run_id = f"run-{int(time.time() * 1000)}"
-        try:
-            from seleniumbase import SB
-            # region agent log
-            self._debug_log(
-                run_id=run_id,
-                hypothesis_id="H2",
-                location="services/scraper_service.py:_scrape_once:import",
-                message="seleniumbase import ok",
-                data={"imported": True},
-            )
-            # endregion
-        except Exception as import_err:
-            # region agent log
-            self._debug_log(
-                run_id=run_id,
-                hypothesis_id="H2",
-                location="services/scraper_service.py:_scrape_once:import",
-                message="seleniumbase import failed",
-                data={
-                    "python_executable": sys.executable,
-                    "seleniumbase_spec_found": bool(importlib.util.find_spec("seleniumbase")),
-                    "error_type": type(import_err).__name__,
-                    "error": str(import_err)[:300],
-                },
-            )
-            # endregion
-            raise
-
+    def _scrape_once(self, source_url: str, portal: str, log: Callable[[str], None]) -> dict[str, Any]:
+        from seleniumbase import SB
         log("Iniciando robot...")
         try:
-            # Ejecuta oculto por defecto para no abrir ventana visible del navegador.
             sb_ctx = SB(uc=True, headless=True)
             sb = sb_ctx.__enter__()
-            # region agent log
-            self._debug_log(
-                run_id=run_id,
-                hypothesis_id="H3",
-                location="services/scraper_service.py:_scrape_once:sb_init",
-                message="Browser context initialized",
-                data={"initialized": True},
-            )
-            # endregion
         except Exception as e:
-            # region agent log
-            self._debug_log(
-                run_id=run_id,
-                hypothesis_id="H3",
-                location="services/scraper_service.py:_scrape_once:sb_init",
-                message="Browser context init failed",
-                data={"error_type": type(e).__name__, "error": str(e)[:300]},
-            )
-            # endregion
             raise RuntimeError(f"Error iniciando navegador: {e}") from e
 
         try:
@@ -140,60 +49,18 @@ class ScraperService:
 
             self._ensure_browser_ready(sb)
             self._warm_page(sb)
-            titulo, precio, ubicacion = self._extract_header(sb)
-            # region agent log
-            self._debug_log(
-                run_id=run_id,
-                hypothesis_id="H8",
-                location="services/scraper_service.py:_scrape_once:header_values",
-                message="Header extracted",
-                data={
-                    "titulo": (titulo or "")[:160],
-                    "precio": precio,
-                    "ubicacion": ubicacion,
-                    "header_debug": getattr(self, "_last_header_debug", {}),
-                },
-            )
-            # endregion
-            log(f"Extraido: {titulo[:50]} | {precio}")
-            fotos = self._extract_images(sb)
-            log(f"Fotos detectadas: {len(fotos)}")
-            descripcion = self._extract_description(sb)
-            caracteristicas = self._extract_features(sb)
-            # region agent log
-            self._debug_log(
-                run_id=run_id,
-                hypothesis_id="H9",
-                location="services/scraper_service.py:_scrape_once:features_values",
-                message="Features extracted",
-                data={
-                    "caracteristicas": caracteristicas,
-                    "features_debug": getattr(self, "_last_features_debug", {}),
-                },
-            )
-            # endregion
-            detalles = self._extract_details(sb, caracteristicas)
-            # region agent log
-            self._debug_log(
-                run_id=run_id,
-                hypothesis_id="H10",
-                location="services/scraper_service.py:_scrape_once:details_values",
-                message="Details extracted",
-                data={"detalles": detalles},
-            )
-            # endregion
-            info_adicional = self._extract_extra_info(sb)
+            if portal == "zonaprop":
+                data = self._extract_zonaprop(sb)
+            elif portal == "argenprop":
+                data = self._extract_argenprop(sb)
+            elif portal == "mercadolibre":
+                data = self._extract_mercadolibre(sb)
+            else:
+                data = self._extract_generic(sb)
 
-            return {
-                "titulo": titulo or "Propiedad en Venta",
-                "precio": precio or "Consultar precio",
-                "ubicacion": ubicacion or "Ver en el portal",
-                "descripcion": descripcion or "Sin descripcion",
-                "detalles": detalles,
-                "caracteristicas": caracteristicas,
-                "info_adicional": info_adicional,
-                "image_urls": fotos[:20],
-            }
+            log(f"Extraido: {(data.get('titulo') or '')[:50]} | {data.get('precio') or ''}")
+            data["source_portal"] = portal
+            return data
         finally:
             try:
                 sb_ctx.__exit__(None, None, None)
@@ -239,161 +106,233 @@ class ScraperService:
             except Exception:
                 continue
 
-    def _extract_header(self, sb) -> tuple[str, str, str]:
-        titulo = sb.execute_script(
-            """
-            var sels = ['h1[data-qa="POSTING_TITLE"]','[data-qa="POSTING_TITLE"]','h1[class*="posting"]','[class*="PostingTitle"]','h1[class*="title"]','h1'];
-            for (var i = 0; i < sels.length; i++) { try { var el = document.querySelector(sels[i]); if (el && el.innerText && el.innerText.trim().length > 10) return el.innerText.trim(); } catch(e){} }
-            return 'Propiedad en Venta';
-            """
-        )
-        precio_data = sb.execute_script(
-            """
-            function clean(t){ return (t||'').replace(/\\s+/g,' ').trim(); }
-            function validPrice(t){
-              var l=clean(t);
-              return /(USD|U\\$S|AR\\$|\\$)\\s*[\\d.]+(?:,[\\d]+)?/i.test(l);
-            }
-            var candidates = [];
-            var selectedSource = 'fallback';
-            var sels = [
-              '[data-qa="POSTING_CARD_PRICE"]',
-              '[data-qa="POSTING_PRICE"]',
-              '[data-qa*="PRICE"]',
-              '[data-qa*="price"]',
-              '[class*="posting-price"]',
-              '[class*="price-value"]',
-              '[class*="Price"]',
-              '.price'
-            ];
-            for (var i = 0; i < sels.length; i++) {
-              try {
-                document.querySelectorAll(sels[i]).forEach(function(el){
-                  var t = clean(el && el.innerText);
-                  if (t && validPrice(t)) candidates.push({text:t, source:sels[i]});
-                });
-              } catch(e){}
-            }
-            for (var j = 0; j < candidates.length; j++) {
-              var p = candidates[j].text;
-              if (/(venta|alquiler)/i.test(p)) {
-                selectedSource = candidates[j].source;
-                return {value:p, candidates:candidates.slice(0,10), selected_source:selectedSource};
-              }
-            }
-            for (var k = 0; k < candidates.length; k++) {
-              var p2 = candidates[k].text;
-              if (!/expensas?/i.test(p2)) {
-                selectedSource = candidates[k].source;
-                return {value:p2, candidates:candidates.slice(0,10), selected_source:selectedSource};
-              }
-            }
+    def _detect_portal(self, source_url: str) -> str:
+        host = urllib.parse.urlparse(source_url).netloc.lower()
+        if "zonaprop" in host:
+            return "zonaprop"
+        if "argenprop" in host:
+            return "argenprop"
+        if "mercadolibre" in host:
+            return "mercadolibre"
+        return "unknown"
 
-            var txt=document.body.innerText || '';
-            var mVenta = txt.match(/(?:Venta|Alquiler)\\s+(?:USD|U\\$S|AR\\$|\\$)\\s*[\\d.]+(?:,[\\d]+)?/i);
-            if (mVenta) return {value:clean(mVenta[0]), candidates:candidates.slice(0,10), selected_source:'body_venta'};
-            var m=txt.match(/(?:USD|U\\$S|AR\\$|\\$)\\s*[\\d.]+(?:,[\\d]+)?/i);
-            return {value:(m ? clean(m[0]) : 'Consultar precio'), candidates:candidates.slice(0,10), selected_source:'body_any'};
-            """
-        ) or {}
-        precio = (precio_data.get("value") if isinstance(precio_data, dict) else str(precio_data or "")) or "Consultar precio"
-        ubicacion_data = sb.execute_script(
-            """
-            function clean(t){ return (t||'').replace(/\\s+/g,' ').trim(); }
-            function looksAddress(t){
-              var v = clean(t);
-              if (!v || v.length < 8 || v.length > 150) return false;
-              if (!v.includes(',')) return false;
-              if (!/\\d/.test(v)) return false;
-              var bad = /(contact|anunciante|ingresar|publicar|favorito|compartir|terminos|condiciones|politica|expensas|ambientes?|dorm|bañ|m²|metros?|superficie)/i;
-              return !bad.test(v);
-            }
-            var sels = [
-              '[data-qa="POSTING_CARD_LOCATION"]',
-              '[data-qa="POSTING_LOCATION"]',
-              '[data-qa*="LOCATION"]',
-              '[data-qa*="location"]',
-              '[class*="posting-location"]',
-              '[class*="PostingLocation"]',
-              '[itemprop="address"]',
-              'address'
-            ];
-            var candidates = [];
-            for (var i = 0; i < sels.length; i++) {
-              try {
-                var nodes = document.querySelectorAll(sels[i]);
-                for (var n = 0; n < nodes.length; n++) {
-                  var t = clean(nodes[n] && nodes[n].innerText);
-                  if (looksAddress(t)) {
-                    candidates.push({text:t, source:sels[i]});
-                    return {value:t, candidates:candidates.slice(0,12), selected_source:sels[i]};
-                  }
-                }
-              } catch(e){}
-            }
-
-            var lines = (document.body.innerText || '').split('\\n').map(clean).filter(Boolean);
-            var selectedPrice = clean(arguments[0] || '');
-            var normalizedPrice = selectedPrice.replace(/^\\s*(venta|alquiler)\\s*/i,'').trim();
-            var selectedIdx = lines.findIndex(function(line){
-              var c = clean(line);
-              if (!c) return false;
-              if (selectedPrice && c.indexOf(selectedPrice) !== -1) return true;
-              if (normalizedPrice && c.indexOf(normalizedPrice) !== -1) return true;
-              return false;
-            });
-            if (selectedIdx >= 0) {
-              for (var s = selectedIdx + 1; s < Math.min(lines.length, selectedIdx + 10); s++) {
-                if (looksAddress(lines[s])) {
-                  candidates.push({text:lines[s], source:'after_selected_price_line'});
-                  return {value:lines[s], candidates:candidates.slice(0,12), selected_source:'after_selected_price_line'};
-                }
-              }
-            }
-
-            var priceIdx = lines.findIndex(function(line){
-              return /(?:Venta|Alquiler)\\s+(?:USD|U\\$S|AR\\$|\\$)\\s*[\\d.]+(?:,[\\d]+)?/i.test(line);
-            });
-            if (priceIdx >= 0) {
-              for (var j = priceIdx + 1; j < Math.min(lines.length, priceIdx + 8); j++) {
-                if (looksAddress(lines[j])) {
-                  candidates.push({text:lines[j], source:'after_price_line'});
-                  return {value:lines[j], candidates:candidates.slice(0,12), selected_source:'after_price_line'};
-                }
-              }
-            }
-            for (var k = 0; k < lines.length; k++) {
-              if (looksAddress(lines[k])) {
-                candidates.push({text:lines[k], source:'all_lines'});
-                return {value:lines[k], candidates:candidates.slice(0,12), selected_source:'all_lines'};
-              }
-            }
-            return {value:'Ver en el portal', candidates:candidates.slice(0,12), selected_source:'none'};
-            """
-        , precio) or {}
-        ubicacion = (ubicacion_data.get("value") if isinstance(ubicacion_data, dict) else str(ubicacion_data or "")) or "Ver en el portal"
-        precio = re.sub(r"\s*(Avisarme|Avisar|si baja|de precio).*$", "", precio or "", flags=re.I).strip()
-        m_venta = re.search(r"(Venta|Alquiler)\s*(USD|U\$S|AR\$|\$)\s*[\d.,]+", precio or "", re.I)
-        if m_venta:
-            precio = re.sub(r"\s+", " ", m_venta.group(0)).strip()
-        m = re.search(r"(USD|U\$S|AR\$|\$)\s*[\d.,]+", precio or "", re.I)
-        if m:
-            if m_venta:
-                simbolo_valor = m.group(0).strip()
-                prefijo = "Venta" if re.search(r"venta", precio, re.I) else "Alquiler"
-                precio = f"{prefijo} {simbolo_valor}"
-            else:
-                precio = m.group(0).strip()
-        self._last_header_debug = {
-            "precio_selected_source": precio_data.get("selected_source") if isinstance(precio_data, dict) else "unknown",
-            "precio_candidates": precio_data.get("candidates", []) if isinstance(precio_data, dict) else [],
-            "ubicacion_selected_source": ubicacion_data.get("selected_source") if isinstance(ubicacion_data, dict) else "unknown",
-            "ubicacion_candidates": ubicacion_data.get("candidates", []) if isinstance(ubicacion_data, dict) else [],
+    def _extract_zonaprop(self, sb) -> dict[str, Any]:
+        titulo = self._pick_text(sb, ['h1[data-qa="POSTING_TITLE"]', '[data-qa="POSTING_TITLE"]', "h1"])
+        precio = self._pick_price(sb, ['[data-qa="POSTING_PRICE"]', '[data-qa="POSTING_CARD_PRICE"]', '[class*="price"]'])
+        ubicacion = self._pick_text(sb, ['[data-qa="POSTING_LOCATION"]', '[data-qa="POSTING_CARD_LOCATION"]', "address"])
+        descripcion = self._pick_text(sb, ['[data-qa="POSTING_DESCRIPTION"]', "#posting-description", '[class*="description"]'])
+        feature_lines = self._collect_lines(sb, ['[data-qa="POSTING_MAIN_FEATURES"]', '[class*="main-features"]'])
+        caracteristicas = self._normalize_features(feature_lines)
+        detalles = self._extract_details_from_features(caracteristicas)
+        return {
+            "titulo": titulo or "Propiedad en Venta",
+            "precio": precio or "Consultar precio",
+            "ubicacion": ubicacion or "Ver en el portal",
+            "descripcion": descripcion or "Sin descripcion",
+            "detalles": detalles,
+            "caracteristicas": caracteristicas,
+            "info_adicional": self._extract_extra_info(sb),
+            "image_urls": self._extract_images(sb, "zonaprop")[:20],
         }
-        return titulo or "", precio or "", ubicacion or ""
 
-    def _extract_images(self, sb) -> list[str]:
-        fotos_raw = sb.execute_script(
+    def _extract_argenprop(self, sb) -> dict[str, Any]:
+        titulo = self._pick_text(sb, ['h1[data-testid*="title"]', 'h1[class*="title"]', "h1"])
+        precio = self._pick_price(sb, ['[data-testid*="price"]', '[class*="price"]'])
+        ubicacion = self._pick_text(sb, ['[data-testid*="location"]', '[class*="location"]', "address"])
+        descripcion = self._pick_text(sb, ['[data-testid*="description"]', '[class*="description"]'])
+        feature_lines = self._collect_lines(sb, ['[class*="feature"]', '[class*="caracter"]', '[class*="main"]'])
+        caracteristicas = self._normalize_features(feature_lines)
+        detalles = self._extract_details_from_features(caracteristicas)
+        return {
+            "titulo": titulo or "Propiedad en Venta",
+            "precio": precio or "Consultar precio",
+            "ubicacion": ubicacion or "Ver en el portal",
+            "descripcion": descripcion or "Sin descripcion",
+            "detalles": detalles,
+            "caracteristicas": caracteristicas,
+            "info_adicional": self._extract_extra_info(sb),
+            "image_urls": self._extract_images(sb, "argenprop")[:20],
+        }
+
+    def _extract_mercadolibre(self, sb) -> dict[str, Any]:
+        titulo = self._pick_text(sb, ["h1.ui-pdp-title", "h1"])
+        precio = self._pick_price(
+            sb,
+            [
+                '[data-testid="price-part"]',
+                ".andes-money-amount__fraction",
+                '[class*="price"]',
+            ],
+        )
+        ubicacion = self._pick_text(
+            sb,
+            ['[data-testid*="location"]', '[class*="ui-pdp-media__title"] a', '[class*="location"]', "address"],
+        )
+        ubicacion = self._clean_mercadolibre_text(ubicacion)
+        descripcion = self._pick_text(sb, ['[data-testid="description-content"]', '[class*="description"]'])
+        descripcion = self._clean_mercadolibre_text(descripcion)
+        feature_lines = self._collect_lines(
+            sb,
+            ['[class*="highlighted-specs"]', '[class*="specs"]', '[class*="attributes"]'],
+        )
+        caracteristicas = self._normalize_features(feature_lines)
+        detalles = self._extract_details_from_features(caracteristicas)
+        return {
+            "titulo": titulo or "Propiedad en Venta",
+            "precio": precio or "Consultar precio",
+            "ubicacion": ubicacion or titulo or "Ver en el portal",
+            "descripcion": descripcion or "Sin descripcion",
+            "detalles": detalles,
+            "caracteristicas": caracteristicas,
+            "info_adicional": self._extract_extra_info(sb),
+            "image_urls": self._extract_images(sb, "mercadolibre")[:20],
+        }
+
+    def _extract_generic(self, sb) -> dict[str, Any]:
+        titulo = self._pick_text(sb, ["h1", '[class*="title"]'])
+        precio = self._pick_price(sb, ['[class*="price"]'])
+        ubicacion = self._pick_text(sb, ["address", '[class*="location"]'])
+        descripcion = self._pick_text(sb, ['[class*="description"]'])
+        caracteristicas = self._normalize_features(self._collect_lines(sb, ['[class*="feature"]']))
+        return {
+            "titulo": titulo or "Propiedad en Venta",
+            "precio": precio or "Consultar precio",
+            "ubicacion": ubicacion or "Ver en el portal",
+            "descripcion": descripcion or "Sin descripcion",
+            "detalles": self._extract_details_from_features(caracteristicas),
+            "caracteristicas": caracteristicas,
+            "info_adicional": self._extract_extra_info(sb),
+            "image_urls": self._extract_images(sb, "unknown")[:20],
+        }
+
+    def _pick_text(self, sb, selectors: list[str]) -> str:
+        script = """
+        const selectors = arguments[0] || [];
+        const clean = (s) => (s || '').replace(/\\s+/g,' ').trim();
+        for (const sel of selectors) {
+          try {
+            const nodes = document.querySelectorAll(sel);
+            for (const node of nodes) {
+              const t = clean(node && node.innerText);
+              if (t && t.length > 2) return t;
+            }
+          } catch (e) {}
+        }
+        return '';
+        """
+        return (sb.execute_script(script, selectors) or "").strip()
+
+    def _pick_price(self, sb, selectors: list[str]) -> str:
+        script = """
+        const selectors = arguments[0] || [];
+        const clean = (s) => (s || '').replace(/\\s+/g,' ').trim();
+        const isPrice = (t) => /(USD|U\\$S|AR\\$|\\$)\\s*[\\d.]+(?:,[\\d]+)?/i.test(t) || /^\\d{2,3}(?:\\.\\d{3})+$/i.test(t);
+        for (const sel of selectors) {
+          try {
+            const nodes = document.querySelectorAll(sel);
+            for (const node of nodes) {
+              const t = clean(node && node.innerText);
+              if (t && isPrice(t) && !/expensas?/i.test(t)) return t;
+            }
+          } catch (e) {}
+        }
+        const txt = document.body && document.body.innerText ? document.body.innerText : '';
+        const m = txt.match(/(?:Venta|Alquiler)?\\s*(?:USD|U\\$S|AR\\$|\\$)\\s*[\\d.]+(?:,[\\d]+)?/i);
+        return m ? clean(m[0]) : '';
+        """
+        raw = (sb.execute_script(script, selectors) or "").strip()
+        raw = re.sub(r"\s*(Avisarme|Avisar|si baja|de precio).*$", "", raw, flags=re.I).strip()
+        m = re.search(r"(?:Venta|Alquiler)?\s*(USD|U\$S|AR\$|\$)\s*[\d.,]+", raw, re.I)
+        return re.sub(r"\s+", " ", m.group(0)).strip() if m else raw
+
+    def _collect_lines(self, sb, selectors: list[str]) -> list[str]:
+        script = """
+        const selectors = arguments[0] || [];
+        const clean = (s) => (s || '').replace(/\\s+/g,' ').trim();
+        const out = [];
+        const seen = new Set();
+        for (const sel of selectors) {
+          try {
+            const roots = document.querySelectorAll(sel);
+            for (const root of roots) {
+              const lines = (root && root.innerText ? root.innerText.split('\\n') : []);
+              for (const line of lines) {
+                const t = clean(line);
+                const key = t.toLowerCase();
+                if (!t || seen.has(key)) continue;
+                seen.add(key);
+                out.push(t);
+              }
+            }
+          } catch (e) {}
+        }
+        return out.slice(0, 120);
+        """
+        lines = sb.execute_script(script, selectors) or []
+        return [str(x).strip() for x in lines if str(x).strip()]
+
+    def _extract_images(self, sb, portal: str) -> list[str]:
+        if portal == "argenprop":
+            fotos_raw = sb.execute_script(
+                """
+                var imgs = new Set();
+                var sels = [
+                  '[class*="carousel"] img',
+                  '[class*="gallery"] img',
+                  '[class*="fotorama"] img',
+                  '[class*="slick"] img'
+                ];
+                sels.forEach(function(sel){
+                  try{
+                    document.querySelectorAll(sel).forEach(function(img){
+                      ['currentSrc','src','data-src','data-lazy-src','data-original'].forEach(function(a){
+                        var u = img.getAttribute(a);
+                        if(u && u.includes('http')) imgs.add(u);
+                      });
+                    });
+                  }catch(e){}
+                });
+                if (imgs.size < 2) {
+                  var og = document.querySelector('meta[property="og:image"]');
+                  if (og && og.content) imgs.add(og.content);
+                }
+                return Array.from(imgs);
+                """
+            ) or []
+        elif portal == "mercadolibre":
+            fotos_raw = sb.execute_script(
+                """
+                var imgs = new Set();
+                var sels = [
+                  '[class*="ui-pdp-gallery"] img',
+                  '[class*="ui-pdp-thumbnail"] img',
+                  '[data-testid*="gallery"] img',
+                  'img[data-zoom]'
+                ];
+                sels.forEach(function(sel){
+                  try{
+                    document.querySelectorAll(sel).forEach(function(img){
+                      var w = img.naturalWidth || img.width || 0;
+                      var h = img.naturalHeight || img.height || 0;
+                      if (w > 0 && h > 0 && (w < 520 || h < 340)) return;
+                      var u = img.getAttribute('data-zoom') || img.currentSrc || img.getAttribute('src') || img.getAttribute('data-src');
+                      if(!u || !u.includes('http')) return;
+                      var lu = u.toLowerCase();
+                      if (lu.includes('banner') || lu.includes('logo') || lu.includes('ads')) return;
+                      if (lu.includes('/d_q_np_2x_') || lu.includes('/d_q_np_') || lu.includes('thumbnail')) return;
+                      imgs.add(u);
+                    });
+                  }catch(e){}
+                });
+                if (imgs.size < 2) {
+                  var og = document.querySelector('meta[property="og:image"]');
+                  if (og && og.content) imgs.add(og.content);
+                }
+                return Array.from(imgs);
+                """
+            ) or []
+        else:
+            fotos_raw = sb.execute_script(
             """
             var imgs = new Set();
             document.querySelectorAll('img').forEach(function(img) {
@@ -410,14 +349,17 @@ class ScraperService:
                 return u.match(/\\.(jpg|jpeg|png|webp)/i) && u.length>50;
             });
             """
-        ) or []
+            ) or []
 
         out: list[str] = []
+        normalized_seen: set[str] = set()
         bad_words = [
-            "logo", "svg", "icon", "avatar", "banner", "tracking", "pixel", "marker",
+            "logo", "svg", "icon", "avatar", "banner", "tracking", "pixel", "marker", "watermark",
             "whatsapp", "facebook", "twitter", "instagram", "youtube", "badge", "leaflet",
-            "cdnjs", "anunciante", "premium", "navent",
+            "cdnjs", "premium", "ads",
         ]
+        if portal == "argenprop":
+            bad_words.extend(["anunciante", "castromil", "inmobiliaria", "broker", "brand"])
         for url in fotos_raw:
             url = re.sub(r"[),;'\"]+$", "", url)
             if "zonapropcdn.com" in url or "zonaprop" in url:
@@ -429,162 +371,99 @@ class ScraperService:
                 url = re.sub(r",h_\d+", ",h_1080", url)
                 url = url.replace("/c_limit/", "/c_fill/").replace("/c_scale/", "/c_fill/").replace("/c_thumb/", "/c_fill/")
                 url = re.sub(r"/q_\d+/", "/q_90/", url)
+            if portal == "mercadolibre":
+                url = self._upgrade_mercadolibre_image_url(url)
             if any(p in url.lower() for p in bad_words):
                 continue
+            if "data:image" in url.lower():
+                continue
+            norm_key = self._normalize_image_url_for_dedupe(url, portal)
+            if norm_key in normalized_seen:
+                continue
+            normalized_seen.add(norm_key)
             out.append(url)
-        return list(dict.fromkeys(out))
+        return out
 
-    def _extract_description(self, sb) -> str:
-        return sb.execute_script(
-            """
-            var sels = ['[data-qa="POSTING_DESCRIPTION"]','[data-qa="posting-description"]','#posting-description','.posting-description','[class*="PostingDescription"]','[class*="postingDescription"]','[class*="description-content"]','[class*="section-description"]','[id*="description"]'];
-            for (var i = 0; i < sels.length; i++) { try { var el=document.querySelector(sels[i]); if(el){ var t=el.innerText; t=t?t.trim():''; if(t.length>30&&t.length<5000&&t.indexOf('iniciar sesión')===-1&&t.indexOf('cookie')===-1) return t; } }catch(e){} }
-            return '';
-            """
-        ) or ""
+    @staticmethod
+    def _normalize_image_url_for_dedupe(url: str, portal: str) -> str:
+        low = (url or "").strip().lower()
+        low = low.split("?", 1)[0]
+        low = re.sub(r"/\d+x\d+/", "/SIZE/", low)
+        low = re.sub(r"([_-])\d{2,4}x\d{2,4}([._-])", r"\1SIZExSIZE\2", low)
+        if portal == "argenprop":
+            low = re.sub(r"/(thumb|small|medium|large|original)/", "/SIZE/", low)
+            low = re.sub(r"-\d+\.(jpg|jpeg|png|webp)$", r".\1", low)
+            low = re.sub(r"(_copy|_dup|_clone)\.(jpg|jpeg|png|webp)$", r".\2", low)
+            low = re.sub(r"/[a-f0-9]{8,}/", "/HASH/", low)
+        if portal == "mercadolibre":
+            low = re.sub(r"/[a-z]_[a-z0-9_]+_", "/SIZE_", low)
+            low = re.sub(r"-[a-z]\.[a-z]{3,4}$", ".img", low)
+        return low
 
-    def _extract_details(self, sb, features: list[str] | None = None) -> dict[str, str | None]:
-        parsed_from_features = self._parse_details_from_features(features or [])
-        details = sb.execute_script(
-            """
-            var d={ambientes:null,banos:null,metros_totales:null,metros_cubiertos:null};
-            var blockSelectors=[
-              '[data-qa="POSTING_MAIN_FEATURES"]',
-              '[data-qa*="MAIN_FEATURE"]',
-              '[class*="main-features"]',
-              '[class*="posting-main-features"]',
-              '[class*="postingFeaturesIcons"]',
-              '[class*="icon-feature"]'
-            ];
-            var txt='';
-            for(var i=0;i<blockSelectors.length;i++){
-              try{
-                var root=document.querySelector(blockSelectors[i]);
-                if(root && root.innerText){
-                  txt += '\\n' + root.innerText;
-                }
-              }catch(e){}
-            }
-            txt=(txt||'').toLowerCase();
-            var ma=txt.match(/(\\d+)\\s*(?:ambientes?|amb\\.?)/i); if(ma) d.ambientes=ma[1];
-            var mb=txt.match(/(\\d+)\\s*(?:baños?|banos?)/i); if(mb) d.banos=mb[1];
-            var mt=txt.match(/([\\d.,]+)\\s*m[²2]\\s*(?:totales?|total|tot\\.?)/i); if(mt) d.metros_totales=mt[1];
-            var mc=txt.match(/([\\d.,]+)\\s*m[²2]\\s*(?:cubiertos?|cubierta|cub\\.?)/i); if(mc) d.metros_cubiertos=mc[1];
-            return d;
-            """
-        ) or {}
-        return {
-            "ambientes": parsed_from_features.get("ambientes") or details.get("ambientes"),
-            "banos": parsed_from_features.get("banos") or details.get("banos"),
-            "metros_totales": parsed_from_features.get("metros_totales") or details.get("metros_totales"),
-            "metros_cubiertos": parsed_from_features.get("metros_cubiertos") or details.get("metros_cubiertos"),
+    @staticmethod
+    def _clean_mercadolibre_text(value: str) -> str:
+        text = (value or "").strip()
+        if not text:
+            return ""
+        bad = [
+            "nunca te pediremos contraseñas",
+            "pin o códigos de verificación",
+            "a través de whatsapp",
+            "teléfono, sms o email",
+            "desde mercado libre",
+        ]
+        low = text.lower()
+        if any(b in low for b in bad):
+            return ""
+        text = re.sub(r"^ubicaci[oó]n\s*", "", text, flags=re.I).strip()
+        text = re.sub(r"\s*ver informaci[oó]n de la zona.*$", "", text, flags=re.I).strip()
+        return text
+
+    @staticmethod
+    def _upgrade_mercadolibre_image_url(url: str) -> str:
+        if not url:
+            return url
+        upgraded = re.sub(r"-[A-Z]\.(jpg|jpeg|png|webp)(\?.*)?$", r"-O.\1\2", url, flags=re.I)
+        upgraded = re.sub(r"/D_[A-Z0-9_]+_", "/D_NQ_NP_", upgraded, flags=re.I)
+        return upgraded
+
+    def _normalize_features(self, lines: list[str]) -> list[str]:
+        patterns = {
+            "metros_totales": r"^[\d.,]+\s*m[²2]\s*(?:tot|tot\.|total|totales)\.?$",
+            "metros_cubiertos": r"^[\d.,]+\s*m[²2]\s*(?:cub|cub\.|cubiertos?|cubierta)\.?$",
+            "ambientes": r"^\d+\s*(?:amb|amb\.|ambientes?)$",
+            "banos": r"^\d+\s*(?:baños?|banos?)$",
+            "dormitorios": r"^\d+\s*(?:dorm|dorm\.|dormitorios?)$",
+            "cocheras": r"^\d+\s*(?:cocheras?|coch\.)$",
+            "antiguedad": r"^\d+\s*(?:años?|anios?)$",
+            "orientacion": r"^(?:frente|contrafrente)$",
         }
+        seen_cat: dict[str, str] = {}
+        seen_txt: set[str] = set()
+        for raw in lines:
+            txt = re.sub(r"\s+", " ", (raw or "").strip())
+            low = txt.lower()
+            if not txt or len(txt) < 3 or low in seen_txt:
+                continue
+            seen_txt.add(low)
 
-    def _extract_features(self, sb) -> list[str]:
-        features_data = sb.execute_script(
-            """
-            var car=[];
-            var seen={};
-            var debugContainers = [];
-            var exc=['cód','cod','anunciante','zonaprop','ver más','contactar','whatsapp','compartir','favorito','publicar','ingresar','registrate','iniciar sesión','buscar','filtrar'];
-            function esValida(t){
-                var l=(t||'').toLowerCase().trim().replace(/\\s+/g,' ');
-                if(l.length<3||l.length>40) return false;
-                for(var i=0;i<exc.length;i++) if(l.includes(exc[i])) return false;
-                var fmts=[
-                    /^\\d+[\\.,]?\\d*\\s*m[²2]\\s*(tot|tot\\.|total|totales)\\.?$/i,
-                    /^\\d+[\\.,]?\\d*\\s*m[²2]\\s*(cub|cub\\.|cubiertos|cubierto|cubierta)\\.?$/i,
-                    /^\\d+\\s*(?:amb|amb\\.|ambientes?)$/i,
-                    /^\\d+\\s*(?:baños?|banos?)$/i,
-                    /^\\d+\\s*(?:dorm|dorm\\.|dormitorios?)$/i,
-                    /^\\d+\\s*(?:años?|anios?)$/i,
-                    /^\\d+\\s*(?:toilettes?)$/i,
-                    /^\\d+\\s*(?:cocheras?)$/i,
-                    /^(?:a\\s*estrenar|nuevo)$/i,
-                    /^(?:balcon|terraza|patio|cochera|pileta|quincho|parrilla|gimnasio|sum|laundry|lavadero|baulera|ascensor|seguridad|portero|contrafrente|frente)$/i
-                ];
-                return fmts.some(function(p){return p.test(l);});
-            }
-            function categoryOf(text){
-                var l=(text||'').toLowerCase().trim().replace(/\\s+/g,' ');
-                if (/\\bm[²2]\\s*(tot|tot\\.|total|totales)\\b/i.test(l)) return 'metros_totales';
-                if (/\\bm[²2]\\s*(cub|cub\\.|cubiertos|cubierto|cubierta)\\b/i.test(l)) return 'metros_cubiertos';
-                if (/\\b(?:amb|amb\\.|ambientes?)\\b/i.test(l)) return 'ambientes';
-                if (/\\b(?:baños?|banos?)\\b/i.test(l)) return 'banos';
-                if (/\\b(?:dorm|dorm\\.|dormitorios?)\\b/i.test(l)) return 'dormitorios';
-                if (/\\b(?:cocheras?|coch\\.)\\b/i.test(l)) return 'cocheras';
-                if (/\\b(?:años?|anios?)\\b/i.test(l)) return 'antiguedad';
-                if (/\\b(?:frente|contrafrente)\\b/i.test(l)) return 'orientacion';
-                if (/\\b(?:toilettes?)\\b/i.test(l)) return 'toilettes';
-                if (/^(?:balcon|terraza|patio|pileta|quincho|parrilla|gimnasio|sum|laundry|lavadero|baulera|ascensor|seguridad|portero)$/i.test(l)) return l;
-                return null;
-            }
-            var seenCategory = {};
-            function pushClean(text){
-                var t=(text||'').trim().replace(/\\s+/g,' ');
-                var key=t.toLowerCase();
-                if(!esValida(t) || seen[key]) return;
-                var cat = categoryOf(t);
-                if (cat && seenCategory[cat]) return;
-                seen[key]=true;
-                if (cat) seenCategory[cat] = true;
-                car.push(t);
-            }
+            matched_cat = None
+            for cat, pat in patterns.items():
+                if re.match(pat, low, flags=re.I):
+                    matched_cat = cat
+                    break
+            if matched_cat and matched_cat in seen_cat:
+                continue
+            if matched_cat:
+                seen_cat[matched_cat] = txt
+                continue
 
-            var blockSelectors=[
-              '[data-qa="POSTING_MAIN_FEATURES"]',
-              '[data-qa*="MAIN_FEATURE"]',
-              '[class*="main-features"]',
-              '[class*="posting-main-features"]',
-              '[class*="postingFeaturesIcons"]',
-              '[class*="icon-feature"]'
-            ];
-            var itemSelectors='li, span, p, div';
-            for(var i=0;i<blockSelectors.length;i++){
-              try{
-                var roots = document.querySelectorAll(blockSelectors[i]);
-                roots.forEach(function(root){
-                  var used = 0;
-                  var sampleLines = [];
-                  var lines = (root && root.innerText ? root.innerText.split('\\n') : [])
-                    .map(function(x){ return (x||'').trim(); })
-                    .filter(function(x){ return !!x; });
-                  lines.forEach(function(line){
-                    if (sampleLines.length < 12) sampleLines.push(line);
-                    var before = car.length;
-                    pushClean(line);
-                    if (car.length > before) used += 1;
-                  });
-                  var directNodes = root.querySelectorAll(':scope > * ' + itemSelectors).length;
-                  debugContainers.push({
-                    selector:blockSelectors[i],
-                    roots_count:roots.length,
-                    lines_count:lines.length,
-                    accepted_nodes:used,
-                    direct_nodes:directNodes,
-                    sample_lines:sampleLines
-                  });
-                });
-              }catch(e){}
-            }
-            return {features:car.slice(0,10), containers:debugContainers};
-            """
-        ) or {}
-        features = features_data.get("features", []) if isinstance(features_data, dict) else (features_data or [])
-        seen: dict[str, str] = {}
-        for f in features:
-            key = (f or "").lower().strip()
-            if key and key not in seen:
-                seen[key] = f
-        deduped = list(seen.values())
-        self._last_features_debug = {
-            "raw_count": len(features),
-            "deduped_count": len(deduped),
-            "containers": features_data.get("containers", []) if isinstance(features_data, dict) else [],
-        }
-        return deduped
+            if re.match(r"^(?:balcon|terraza|patio|pileta|quincho|parrilla|gimnasio|sum|laundry|lavadero|baulera|ascensor|seguridad|portero)$", low, flags=re.I):
+                seen_cat[f"extra_{low}"] = txt
+        out = list(seen_cat.values())
+        return out[:10]
 
-    def _parse_details_from_features(self, features: list[str]) -> dict[str, str | None]:
+    def _extract_details_from_features(self, features: list[str]) -> dict[str, str | None]:
         details: dict[str, str | None] = {
             "ambientes": None,
             "banos": None,

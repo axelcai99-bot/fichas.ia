@@ -16,6 +16,7 @@ class PropertyService:
         self,
         *,
         source_url: str,
+        owner_username: str,
         agent_name: str,
         agent_whatsapp: str,
         form_url: str,
@@ -24,6 +25,8 @@ class PropertyService:
     ) -> int:
         property_id = self.property_repo.create_property(
             {
+                "owner_username": owner_username,
+                "source_portal": scraped.get("source_portal", "zonaprop"),
                 "titulo": scraped["titulo"],
                 "precio": scraped["precio"],
                 "ubicacion": scraped["ubicacion"],
@@ -73,8 +76,8 @@ class PropertyService:
             saved = [self._placeholder_svg_url()] * 5
         return saved
 
-    def delete_property(self, property_id: int) -> bool:
-        deleted = self.property_repo.delete_property(property_id)
+    def delete_property(self, property_id: int, owner_username: str | None = None) -> bool:
+        deleted = self.property_repo.delete_property(property_id, owner_username=owner_username)
         if not deleted:
             return False
 

@@ -55,3 +55,20 @@ class AuthService:
             return False, "Usuario no encontrado"
         self.user_repo.update_password(username, hash_pw(new_pw))
         return True, "ok"
+
+    def admin_delete_user(self, username: str, acting_username: str) -> tuple[bool, str]:
+        username = (username or "").strip().lower()
+        acting_username = (acting_username or "").strip().lower()
+        if not username:
+            return False, "Falta usuario"
+        if username == "admin":
+            return False, "No podés borrar al admin"
+        if username == acting_username:
+            return False, "No podés borrarte a vos mismo"
+        user = self.user_repo.get_user(username)
+        if not user:
+            return False, "Usuario no encontrado"
+        deleted = self.user_repo.delete_user(username)
+        if not deleted:
+            return False, "No se pudo borrar el usuario"
+        return True, "ok"
