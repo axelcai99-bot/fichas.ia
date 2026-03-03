@@ -1,5 +1,6 @@
 import os
 import queue
+import re
 import threading
 import urllib.parse
 import uuid
@@ -21,6 +22,7 @@ from flask import (
 )
 
 from db import init_db
+from repositories.client_repository import ClientRepository
 from repositories.property_repository import PropertyRepository
 from repositories.user_repository import UserRepository
 from services.auth_service import AuthService
@@ -36,11 +38,25 @@ init_db()
 
 user_repo = UserRepository()
 property_repo = PropertyRepository()
+client_repo = ClientRepository()
 auth_service = AuthService(user_repo)
 scraper_service = ScraperService()
 property_service = PropertyService(property_repo, base_dir=BASE_DIR)
 
 JOBS: dict = {}
+VALID_CLIENT_TYPES = {"ph", "casa", "depto", "otro"}
+VALID_CLIENT_ZONAS = {
+    "agronomia", "almagro", "balvanera", "barracas", "belgrano", "boedo", "caballito",
+    "chacarita", "coghlan", "colegiales", "constitucion", "flores", "floresta", "la boca",
+    "la paternal", "liniers", "mataderos", "monserrat", "monte castro", "nuñez", "nunez",
+    "palermo", "parque avellaneda", "parque chacabuco", "parque chas", "parque patricios",
+    "puerto madero", "recoleta", "retiro", "saavedra", "san cristobal", "san nicolas",
+    "san telmo", "velez sarsfield", "versalles", "villa crespo", "villa del parque",
+    "villa devoto", "villa general mitre", "villa lugano", "villa luro", "villa ortuzar",
+    "villa pueyrredon", "villa real", "villa riachuelo", "villa santa rita", "villa soldati",
+    "villa urquiza", "olivos", "vicente lopez", "la lucila", "martinez", "san isidro",
+    "acassuso", "beccar", "munro", "florida", "carapachay", "villa adelina",
+}
 
 def _debug_log(run_id: str, hypothesis_id: str, location: str, message: str, data: dict) -> None:
     payload = {
@@ -59,6 +75,71 @@ def _debug_log(run_id: str, hypothesis_id: str, location: str, message: str, dat
 
 def get_user(username: str):
     return user_repo.get_user(username)
+
+
+def _normalize_presupuesto(value: str) -> str:
+    digits = re.sub(r"\D", "", value or "")
+    if not digits:
+        return ""
+    rev = digits[::-1]
+    chunks = [rev[i:i + 3] for i in range(0, len(rev), 3)]
+    return ".".join(c[::-1] for c in chunks[::-1])
+
+
+def _sanitize_client_payload(data: dict) -> tuple[bool, dict | str]:
+    nombre = re.sub(r"\s+", " ", (data.get("nombre") or "").strip())
+    telefono = re.sub(r"\D", "", data.get("telefono") or "")
+    presupuesto = _normalize_presupuesto(data.get("presupuesto") or "")
+    tipo_raw = (data.get("tipo") or "").strip().lower()
+    ambientes_raw = (data.get("ambientes") or "").strip()
+    zonas_raw = (data.get("zonas_busqueda") or "").strip()
+    notas_resumidas = (data.get("notas_resumidas") or "").strip()
+    situacion = (data.get("situacion") or "").strip()
+
+    if not nombre:
+        return False, "Nombre requerido"
+    if not re.fullmatch(r"[A-Za-zÁÉÍÓÚÜÑáéíóúüñ ]{2,80}", nombre):
+        return False, "Nombre solo letras y espacios"
+    if not telefono:
+        return False, "Teléfono requerido"
+    if len(telefono) < 8 or len(telefono) > 15:
+        return False, "Teléfono inválido"
+    tipos = [t.strip().lower() for t in tipo_raw.split(",") if t.strip()]
+    if not tipos:
+        return False, "Seleccioná al menos un tipo"
+    for t in tipos:
+        if t not in VALID_CLIENT_TYPES:
+            return False, f"Tipo inválido: {t}"
+
+    ambientes_list: list[str] = []
+    if ambientes_raw:
+        ambientes_list = [a.strip() for a in ambientes_raw.split(",") if a.strip()]
+        if not ambientes_list:
+            return False, "Ambientes inválido"
+        for a in ambientes_list:
+            if not a.isdigit():
+                return False, "Ambientes debe ser numérico"
+            if not (1 <= int(a) <= 10):
+                return False, "Ambientes debe estar entre 1 y 10"
+
+    zonas = [z.strip().lower() for z in zonas_raw.split(",") if z.strip()]
+    if not zonas:
+        return False, "Seleccioná al menos una zona"
+    for z in zonas:
+        if z not in VALID_CLIENT_ZONAS:
+            return False, f"Zona inválida: {z}"
+
+    return True, {
+        "nombre": nombre,
+        "telefono": telefono,
+        "presupuesto": presupuesto,
+        "tipo": ", ".join(dict.fromkeys(tipos)),
+        "ambientes": ", ".join(dict.fromkeys(ambientes_list)),
+        "apto_credito": bool(data.get("apto_credito")),
+        "zonas_busqueda": ", ".join(zonas),
+        "notas_resumidas": notas_resumidas,
+        "situacion": situacion,
+    }
 
 
 def login_required(f):
@@ -203,6 +284,20 @@ def reset_password():
     return jsonify({"ok": True})
 
 
+@app.route("/api/admin/delete_usuario", methods=["POST"])
+@admin_required
+def delete_usuario():
+    data = request.json or {}
+    ok, msg = auth_service.admin_delete_user(
+        username=data.get("username", ""),
+        acting_username=session["username"],
+    )
+    if not ok:
+        status = 404 if msg == "Usuario no encontrado" else 400
+        return jsonify({"error": msg}), status
+    return jsonify({"ok": True})
+
+
 @app.route("/api/generar", methods=["POST"])
 @login_required
 def generar():
@@ -318,16 +413,64 @@ def property_detail(property_id: int):
 @app.route("/propiedades")
 @login_required
 def properties_list():
-    items = property_repo.list_properties(limit=100)
+    username = session["username"]
+    portal = (request.args.get("portal") or "").strip().lower()
+    allowed = {"zonaprop", "argenprop", "mercadolibre"}
+    source_portal = portal if portal in allowed else None
+    items = property_repo.list_properties(limit=100, owner_username=username, source_portal=source_portal)
     return jsonify(items)
 
 
 @app.route("/api/propiedades/<int:property_id>", methods=["DELETE"])
 @login_required
 def delete_property(property_id: int):
-    deleted = property_service.delete_property(property_id)
+    username = session["username"]
+    deleted = property_service.delete_property(property_id, owner_username=username)
     if not deleted:
         return jsonify({"error": "Propiedad no encontrada"}), 404
+    return jsonify({"ok": True})
+
+
+@app.route("/api/clientes", methods=["GET"])
+@login_required
+def list_clients():
+    username = session["username"]
+    return jsonify(client_repo.list_clients(owner_username=username))
+
+
+@app.route("/api/clientes", methods=["POST"])
+@login_required
+def create_client():
+    username = session["username"]
+    data = request.json or {}
+    ok, payload_or_msg = _sanitize_client_payload(data)
+    if not ok:
+        return jsonify({"error": payload_or_msg}), 400
+    client_id = client_repo.create_client(owner_username=username, payload=payload_or_msg)
+    return jsonify({"ok": True, "id": client_id})
+
+
+@app.route("/api/clientes/<int:client_id>", methods=["PUT"])
+@login_required
+def update_client(client_id: int):
+    username = session["username"]
+    data = request.json or {}
+    ok, payload_or_msg = _sanitize_client_payload(data)
+    if not ok:
+        return jsonify({"error": payload_or_msg}), 400
+    ok = client_repo.update_client(client_id=client_id, owner_username=username, payload=payload_or_msg)
+    if not ok:
+        return jsonify({"error": "Cliente no encontrado"}), 404
+    return jsonify({"ok": True})
+
+
+@app.route("/api/clientes/<int:client_id>", methods=["DELETE"])
+@login_required
+def delete_client(client_id: int):
+    username = session["username"]
+    ok = client_repo.delete_client(client_id=client_id, owner_username=username)
+    if not ok:
+        return jsonify({"error": "Cliente no encontrado"}), 404
     return jsonify({"ok": True})
 
 
@@ -371,6 +514,7 @@ def _run_generation(job_id, source_url, agent_name, agent_whatsapp, form_url, ru
         scraped = scraper_service.scrape_property(source_url, log)
         property_id = property_service.save_scraped_property(
             source_url=source_url,
+            owner_username=job.get("user", "admin"),
             agent_name=agent_name or "Asesor",
             agent_whatsapp=agent_whatsapp or "",
             form_url=form_url or "",

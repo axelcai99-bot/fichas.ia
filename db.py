@@ -40,6 +40,8 @@ def init_db() -> None:
             """
             CREATE TABLE IF NOT EXISTS properties (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner_username TEXT NOT NULL DEFAULT 'admin',
+                source_portal TEXT NOT NULL DEFAULT 'zonaprop',
                 titulo TEXT NOT NULL,
                 precio TEXT NOT NULL,
                 ubicacion TEXT NOT NULL,
@@ -56,10 +58,49 @@ def init_db() -> None:
             )
             """
         )
+        _ensure_properties_owner_column(conn)
+        _ensure_properties_source_portal_column(conn)
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS clients (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner_username TEXT NOT NULL,
+                nombre TEXT NOT NULL,
+                telefono TEXT NOT NULL DEFAULT '',
+                presupuesto TEXT NOT NULL DEFAULT '',
+                tipo TEXT NOT NULL DEFAULT 'otro',
+                ambientes TEXT NOT NULL DEFAULT '',
+                apto_credito INTEGER NOT NULL DEFAULT 0,
+                zonas_busqueda TEXT NOT NULL DEFAULT '',
+                notas_resumidas TEXT NOT NULL DEFAULT '',
+                situacion TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
         conn.execute(
             """
             CREATE INDEX IF NOT EXISTS idx_properties_created_at
             ON properties(created_at DESC)
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_properties_owner_username
+            ON properties(owner_username)
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_properties_source_portal
+            ON properties(source_portal)
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_clients_owner_username
+            ON clients(owner_username)
             """
         )
         conn.commit()
@@ -133,3 +174,19 @@ def _mark_users_json_migrated() -> None:
         # Si no se puede renombrar (permisos/bloqueo), se deja el archivo original.
         # La tabla users ya no vacia evita reimportaciones en arranques siguientes.
         pass
+
+
+def _ensure_properties_owner_column(conn: sqlite3.Connection) -> None:
+    cols = conn.execute("PRAGMA table_info(properties)").fetchall()
+    col_names = {c["name"] for c in cols}
+    if "owner_username" not in col_names:
+        conn.execute("ALTER TABLE properties ADD COLUMN owner_username TEXT")
+        conn.execute("UPDATE properties SET owner_username = 'admin' WHERE owner_username IS NULL OR owner_username = ''")
+
+
+def _ensure_properties_source_portal_column(conn: sqlite3.Connection) -> None:
+    cols = conn.execute("PRAGMA table_info(properties)").fetchall()
+    col_names = {c["name"] for c in cols}
+    if "source_portal" not in col_names:
+        conn.execute("ALTER TABLE properties ADD COLUMN source_portal TEXT")
+        conn.execute("UPDATE properties SET source_portal = 'zonaprop' WHERE source_portal IS NULL OR source_portal = ''")
