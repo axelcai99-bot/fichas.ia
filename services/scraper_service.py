@@ -157,6 +157,8 @@ class ScraperService:
         descripcion = self._extract_description(source_text, html) or self._best_text_block(source_text)
         caracteristicas = self._extract_features(source_text, html)
         detalles = self._extract_detail_candidates(source_text)
+        detalles_html = self._extract_detail_candidates_from_html(html)
+        detalles.update({k: v for k, v in detalles_html.items() if v})
         return {
             "titulo": self._extract_title(source_text) or "Propiedad en Venta",
             "precio": price_match.group(0) if price_match else "Consultar precio",
@@ -169,7 +171,7 @@ class ScraperService:
             "cocheras": detalles.get("cocheras"),
             "antiguedad": detalles.get("antiguedad"),
             "expensas": detalles.get("expensas"),
-            "caracteristicas": caracteristicas,
+            "caracteristicas": self._merge_feature_lists(caracteristicas, self._details_to_features(detalles)),
             "image_urls": self._extract_image_urls_from_html(html) + self._extract_image_urls_from_markdown(markdown),
         }
 
@@ -208,6 +210,7 @@ class ScraperService:
             ".svg",
         )
         filtered: list[str] = []
+        seen_keys: set[str] = set()
         for url in urls:
             if not isinstance(url, str):
                 continue
@@ -225,6 +228,10 @@ class ScraperService:
             )
             if not looks_like_image:
                 continue
+            dedupe_key = ScraperService._image_dedupe_key(clean_url)
+            if dedupe_key in seen_keys:
+                continue
+            seen_keys.add(dedupe_key)
             if clean_url not in filtered:
                 filtered.append(clean_url)
         return filtered[:MAX_IMAGES]
@@ -428,8 +435,8 @@ class ScraperService:
             return ""
         patterns = [
             r"Descripción\s*(.+?)(?:Leer menos|Características|Servicios|Ubicación|Mapa|Propiedades similares)",
-            r"Departamento .*?(?:Capital Federal|Buenos Aires)\.\s+(.+?)(?:LEPORE|AVISO LEGAL|XINTEL|Leer menos)",
-            r"Venta de .*?(?:Capital Federal|Buenos Aires)\.\s+(.+?)(?:LEPORE|AVISO LEGAL|XINTEL|Leer menos)",
+            r"(Venta de .*?(?:Capital Federal|Buenos Aires)\..+?)(?:LEPORE|AVISO LEGAL|XINTEL|Leer menos)",
+            r"(Departamento .*?(?:Capital Federal|Buenos Aires)\..+?)(?:LEPORE|AVISO LEGAL|XINTEL|Leer menos)",
         ]
         for pattern in patterns:
             match = re.search(pattern, text, re.I | re.S)
@@ -445,9 +452,10 @@ class ScraperService:
         if not text:
             return ""
         text = re.sub(r"\bVer datos\b\.?", "", text, flags=re.I)
+        text = re.sub(r"\bLEPORE SAN CRISTOBAL\b.*$", "", text, flags=re.I | re.S)
+        text = re.sub(r"\bLEPORE PROPIEDADES\b.*$", "", text, flags=re.I | re.S)
         text = re.sub(r"\bAVISO LEGAL:.*$", "", text, flags=re.I | re.S)
         text = re.sub(r"\bXINTEL.*$", "", text, flags=re.I | re.S)
-        text = re.sub(r"\bLEPORE.*$", "", text, flags=re.I | re.S)
         text = re.sub(r"\n{3,}", "\n\n", text)
         text = re.sub(r"[ \t]{2,}", " ", text)
         return text.strip(" .\n")
@@ -481,7 +489,7 @@ class ScraperService:
     def _extract_title(markdown: str) -> str:
         title = ScraperService._first_h1(markdown)
         if title:
-            return title
+            return ScraperService._clean_title(title)
         for line in [l.strip("# ").strip() for l in markdown.splitlines()]:
             if len(line) < 12 or len(line) > 140:
                 continue
@@ -490,13 +498,15 @@ class ScraperService:
             if re.search(r"\b(favorito|compartir|publicado|actualizado)\b", line, re.I):
                 continue
             if re.search(r"[A-Za-zÁÉÍÓÚáéíóúñ]", line):
-                return line
+                return ScraperService._clean_title(line)
         return ""
 
     @staticmethod
     def _extract_location(markdown: str) -> str:
+        markdown = re.sub(r"\[([^\]]+)\]\((https?://[^)]+)\)", r"\1", markdown)
         patterns = [
             r"(?:Dirección|Ubicación)\s*:?\s*(.+)",
+            r"(?m)^(Capital Federal|CABA|Buenos Aires|San Cristóbal|San Cristobal|Palermo|Belgrano|Caballito|Recoleta|Vicente López|Vicente Lopez|San Isidro)\s*$",
             r"(?m)^[>#\-\*\s]*([A-ZÁÉÍÓÚÑ][^\n]{6,120},\s*[A-ZÁÉÍÓÚÑa-záéíóúñ ]{3,80})$",
             r"(?m)^[>#\-\*\s]*([A-ZÁÉÍÓÚÑ][^\n]{6,120}\b(?:CABA|Capital Federal|Buenos Aires|Vicente López|San Isidro|Olivos|Palermo|Belgrano)\b[^\n]*)$",
         ]
@@ -504,6 +514,7 @@ class ScraperService:
             match = re.search(pattern, markdown, re.I)
             if match:
                 value = re.sub(r"\s+", " ", match.group(1)).strip(" -|")
+                value = re.sub(r"https?://\S+", "", value).strip()
                 if len(value) <= 120:
                     return value
         return ""
@@ -577,6 +588,10 @@ class ScraperService:
                 r"(\d+)\s+ambientes?",
                 r"Ambientes?\s*:?\s*(\d+)",
             ],
+            "dormitorios": [
+                r"(\d+)\s+dorm(?:itorios?|\.?)",
+                r"Dormitorios?\s*:?\s*(\d+)",
+            ],
             "banos": [
                 r"(\d+)\s+bañ[oa]s?",
                 r"Baños?\s*:?\s*(\d+)",
@@ -600,6 +615,15 @@ class ScraperService:
             "expensas": [
                 r"Expensas\s*:?\s*((?:USD|U\$S|AR\$|\$)\s*[\d.,]+)",
             ],
+            "disposicion": [
+                r"\b(Frente|Contrafrente|Interno|Lateral)\b",
+            ],
+            "orientacion": [
+                r"\b(Norte|Sur|Este|Oeste|NE|NO|SE|SO|N|S|E|O)\b",
+            ],
+            "estado": [
+                r"\b(A estrenar|Excelente estado|Muy buen estado|Buen estado|En construcción)\b",
+            ],
         }
         out: dict[str, str | None] = {key: None for key in patterns}
         for key, regexes in patterns.items():
@@ -620,7 +644,7 @@ class ScraperService:
                 continue
             if re.search(r"(USD|U\$S|AR\$|\$)\s*[\d.,]+", line, re.I):
                 continue
-            if re.search(r"\b(?:m[²2]|ambientes?|bañ[oa]s?|cocheras?|expensas?)\b", line, re.I):
+            if re.search(r"\b(?:m[²2]|ambientes?|bañ[oa]s?|cocheras?|expensas?|dorm(?:itorios?|\.?)|a estrenar|frente|contrafrente)\b", line, re.I):
                 candidates.append(line)
                 continue
             if re.search(r"\b(balc[oó]n|terraza|patio|parrilla|pileta|lavadero|suite|luminos[oa]|apto cr[eé]dito|seguridad|sum|quincho|jard[ií]n)\b", line, re.I):
@@ -631,3 +655,92 @@ class ScraperService:
             if cleaned and cleaned not in deduped:
                 deduped.append(cleaned)
         return deduped[:20]
+
+    @staticmethod
+    def _image_dedupe_key(url: str) -> str:
+        parsed = urllib.parse.urlsplit(url)
+        path = (parsed.path or "").lower()
+        path = re.sub(r"/(fit-in|crop|thumb|thumbnail|small|medium|large)/", "/", path)
+        path = re.sub(r"[-_](?:\d{2,4}x\d{2,4}|w\d{2,4}|h\d{2,4})", "", path)
+        filename = path.rsplit("/", 1)[-1]
+        stem = re.sub(r"\.(jpg|jpeg|png|webp|avif)$", "", filename)
+        stem = re.sub(r"[-_](?:scaled|thumb|thumbnail|small|medium|large)$", "", stem)
+        return stem or path or url.lower()
+
+    @staticmethod
+    def _clean_title(title: str) -> str:
+        title = re.sub(r"\s+", " ", (title or "")).strip()
+        title = title.replace("\\", "")
+        title = re.sub(r"\s+\|\s+", " | ", title)
+        return title.strip(" -|")
+
+    @staticmethod
+    def _extract_detail_candidates_from_html(html: str) -> dict[str, str | None]:
+        text = ScraperService._html_to_text(html)
+        lines = [re.sub(r"\s+", " ", line).strip() for line in text.splitlines()]
+        values = {
+            "metros_totales": None,
+            "metros_cubiertos": None,
+            "ambientes": None,
+            "banos": None,
+            "dormitorios": None,
+            "estado": None,
+            "disposicion": None,
+            "orientacion": None,
+        }
+        for line in lines:
+            if not line:
+                continue
+            if not values["metros_totales"]:
+                m = re.search(r"(\d+)\s*m²\s*tot\.?", line, re.I)
+                if m:
+                    values["metros_totales"] = m.group(1)
+            if not values["metros_cubiertos"]:
+                m = re.search(r"(\d+)\s*m²\s*cub\.?", line, re.I)
+                if m:
+                    values["metros_cubiertos"] = m.group(1)
+            if not values["ambientes"]:
+                m = re.search(r"(\d+)\s*amb\.?", line, re.I)
+                if m:
+                    values["ambientes"] = m.group(1)
+            if not values["banos"]:
+                m = re.search(r"(\d+)\s*bañ[oa]s?", line, re.I)
+                if m:
+                    values["banos"] = m.group(1)
+            if not values["dormitorios"]:
+                m = re.search(r"(\d+)\s*dorm\.?", line, re.I)
+                if m:
+                    values["dormitorios"] = m.group(1)
+            if not values["estado"]:
+                m = re.search(r"\b(A estrenar|Excelente estado|Muy buen estado|Buen estado|En construcción)\b", line, re.I)
+                if m:
+                    values["estado"] = m.group(1)
+            if not values["disposicion"]:
+                m = re.search(r"\b(Frente|Contrafrente|Interno|Lateral)\b", line, re.I)
+                if m:
+                    values["disposicion"] = m.group(1)
+            if not values["orientacion"]:
+                m = re.search(r"\b(Norte|Sur|Este|Oeste|NE|NO|SE|SO|N|S|E|O)\b", line, re.I)
+                if m:
+                    values["orientacion"] = m.group(1)
+        return values
+
+    @staticmethod
+    def _details_to_features(detalles: dict[str, str | None]) -> list[str]:
+        features: list[str] = []
+        mappings = [
+            ("metros_totales", "m² totales"),
+            ("metros_cubiertos", "m² cubiertos"),
+            ("ambientes", "ambientes"),
+            ("banos", "baños"),
+            ("dormitorios", "dormitorios"),
+        ]
+        for key, suffix in mappings:
+            value = (detalles.get(key) or "").strip()
+            if value:
+                features.append(f"{value} {suffix}")
+        for key in ("estado", "disposicion", "orientacion"):
+            value = (detalles.get(key) or "").strip()
+            if value:
+                features.append(value)
+        return features
