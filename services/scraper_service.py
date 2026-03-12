@@ -624,14 +624,14 @@ class ScraperService:
         if url_tokens:
             tokens_preview = ", ".join(url_tokens[:5])
             reason = (
-                "Firecrawl devolvió contenido que no coincide con la URL del aviso. "
+                "Zonaprop/Firecrawl devolvió contenido que no coincide con la URL del aviso. "
                 f"Tokens esperados según la URL: {tokens_preview}."
             )
         else:
-            reason = "Firecrawl devolvió contenido que no coincide con la URL del aviso."
+            reason = "Zonaprop/Firecrawl devolvió contenido que no coincide con la URL del aviso."
 
         if listing_id and not html_has_listing_id and not markdown_has_listing_id:
-            reason += f" El ID {listing_id} no apareció en el contenido devuelto por Zonaprop."
+            reason += f" El ID {listing_id} no apareció en el contenido devuelto."
 
         reason += " No se guardó la ficha para evitar mezclar otra propiedad."
         return reason
