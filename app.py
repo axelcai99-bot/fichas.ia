@@ -498,10 +498,18 @@ def _merge_features(caracteristicas: list[str], detalles: dict) -> list[str]:
         merged.insert(0, f"{detalles['ambientes']} ambientes")
     if detalles.get("banos") and "ba" not in cl:
         merged.insert(1, f"{detalles['banos']} baños")
+    if detalles.get("dormitorios") and "dorm" not in cl:
+        merged.append(f"{detalles['dormitorios']} dormitorios")
     if detalles.get("metros_totales") and "tot" not in cl:
         merged.append(f"{detalles['metros_totales']} m² totales")
     if detalles.get("metros_cubiertos") and "cub" not in cl:
         merged.append(f"{detalles['metros_cubiertos']} m² cubiertos")
+    if detalles.get("estado") and detalles["estado"].lower() not in cl:
+        merged.append(detalles["estado"])
+    if detalles.get("disposicion") and detalles["disposicion"].lower() not in cl:
+        merged.append(detalles["disposicion"])
+    if detalles.get("orientacion") and detalles["orientacion"].lower() not in cl:
+        merged.append(detalles["orientacion"])
     return merged
 
 
