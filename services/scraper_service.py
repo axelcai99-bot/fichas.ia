@@ -1,6 +1,7 @@
 import re
 import urllib.parse
 import urllib.request
+import urllib.error
 import json
 from typing import Callable, Any
 
@@ -88,7 +89,7 @@ class ScraperService:
         }
 
     # ──────────────────────────────────────────────
-    # Paso 1: Cloudflare /scrape → Markdown
+    # Paso 1: Cloudflare /markdown → Markdown
     # ──────────────────────────────────────────────
 
     def _fetch_markdown(
@@ -114,6 +115,15 @@ class ScraperService:
         try:
             with urllib.request.urlopen(req, timeout=60) as resp:
                 body = json.loads(resp.read())
+        except urllib.error.HTTPError as e:
+            # Leemos el cuerpo para entender por qué Cloudflare devuelve 404/4xx
+            try:
+                error_body = e.read().decode("utf-8", errors="ignore")
+            except Exception:
+                error_body = ""
+            raise RuntimeError(
+                f"Error HTTP en Cloudflare /markdown: {e.code} {e.reason} - {error_body}"
+            ) from e
         except Exception as e:
             raise RuntimeError(f"Error en Cloudflare /markdown: {e}") from e
 
