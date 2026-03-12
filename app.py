@@ -487,30 +487,111 @@ def delete_client(client_id: int):
 
 
 def _merge_features(caracteristicas: list[str], detalles: dict) -> list[str]:
-    seen: dict[str, str] = {}
-    for c in (caracteristicas or []):
-        key = (c or "").lower().strip()
-        if key and key not in seen:
-            seen[key] = c
-    merged = list(seen.values())
-    cl = " ".join(merged).lower()
-    if detalles.get("ambientes") and "amb" not in cl:
-        merged.insert(0, f"{detalles['ambientes']} ambientes")
-    if detalles.get("banos") and "ba" not in cl:
-        merged.insert(1, f"{detalles['banos']} baños")
-    if detalles.get("dormitorios") and "dorm" not in cl:
-        merged.append(f"{detalles['dormitorios']} dormitorios")
-    if detalles.get("metros_totales") and "tot" not in cl:
-        merged.append(f"{detalles['metros_totales']} m² totales")
-    if detalles.get("metros_cubiertos") and "cub" not in cl:
-        merged.append(f"{detalles['metros_cubiertos']} m² cubiertos")
-    if detalles.get("estado") and detalles["estado"].lower() not in cl:
-        merged.append(detalles["estado"])
-    if detalles.get("disposicion") and detalles["disposicion"].lower() not in cl:
-        merged.append(detalles["disposicion"])
-    if detalles.get("orientacion") and detalles["orientacion"].lower() not in cl:
-        merged.append(detalles["orientacion"])
+    merged: list[str] = []
+    seen: set[str] = set()
+
+    for item in _ordered_detail_features(detalles):
+        _append_feature(merged, seen, item)
+
+    for feature in (caracteristicas or []):
+        cleaned = _clean_feature_label(feature)
+        if not cleaned or _feature_duplicates_details(cleaned, detalles):
+            continue
+        _append_feature(merged, seen, cleaned)
+
     return merged
+
+
+def _ordered_detail_features(detalles: dict) -> list[str]:
+    ordered: list[str] = []
+    mappings = [
+        ("metros_totales", lambda value: f"{value} m\u00b2 tot."),
+        ("metros_cubiertos", lambda value: f"{value} m\u00b2 cub."),
+        ("ambientes", lambda value: f"{value} amb."),
+        ("banos", lambda value: f"{value} ba\u00f1os"),
+        ("dormitorios", lambda value: f"{value} dorm."),
+        ("estado", lambda value: value),
+        ("disposicion", lambda value: value),
+    ]
+    for key, formatter in mappings:
+        raw_value = _repair_text((detalles.get(key) or "").strip())
+        if not raw_value:
+            continue
+        ordered.append(formatter(raw_value))
+    return ordered
+
+
+def _append_feature(target: list[str], seen: set[str], value: str) -> None:
+    normalized = _repair_text(value).strip()
+    if not normalized:
+        return
+    key = normalized.lower()
+    if key in seen:
+        return
+    seen.add(key)
+    target.append(normalized)
+
+
+def _clean_feature_label(value: str) -> str:
+    cleaned = _repair_text(re.sub(r"\s+", " ", (value or "")).replace("\\|", " ")).strip(" -|:.,")
+    if len(cleaned) < 2:
+        return ""
+
+    normalized = cleaned.lower()
+    if normalized in {
+        "amb", "amb.", "ambiente", "ambientes",
+        "dorm", "dorm.", "dormitorio", "dormitorios",
+        "ba\u00f1o", "ba\u00f1os", "bano", "banos",
+        "m\u00b2 tot", "m\u00b2 cub", "m2 tot", "m2 cub",
+    }:
+        return ""
+    if re.fullmatch(r"\d+(?:[.,]\d+)?", normalized):
+        return ""
+    if re.search(r"\b(publicado|actualizado|favorito|compartir|notas personales|ver datos)\b", normalized):
+        return ""
+    if re.search(r"\bdepartamento\b", normalized) and re.search(r"\bamb", normalized):
+        return ""
+    if re.search(r"\b(?:av|avenida|calle|pasaje|pje|ruta|boulevard|blvd|bv)\b", normalized) and re.search(r"\d{3,5}", normalized):
+        return ""
+    if re.search(r"\b(?:capital federal|san crist[oó]bal)\b", normalized):
+        return ""
+    if re.search(r"\b\d+\s+o\s+m[aá]s\s+ambientes?\b", normalized):
+        return ""
+
+    return cleaned
+
+
+def _feature_duplicates_details(value: str, detalles: dict) -> bool:
+    normalized = _repair_text(value).lower()
+    detail_patterns = [
+        ("metros_totales", f"\\b{re.escape(str(detalles.get('metros_totales') or '').strip())}\\s*m(?:²|2).*(?:tot|total)"),
+        ("metros_cubiertos", f"\\b{re.escape(str(detalles.get('metros_cubiertos') or '').strip())}\\s*m(?:²|2).*(?:cub|cubierta)"),
+        ("ambientes", f"\\b{re.escape(str(detalles.get('ambientes') or '').strip())}\\s*(?:amb|ambientes?)"),
+        ("banos", f"\\b{re.escape(str(detalles.get('banos') or '').strip())}\\s*(?:bañ|ban)"),
+        ("dormitorios", f"\\b{re.escape(str(detalles.get('dormitorios') or '').strip())}\\s*dorm"),
+    ]
+    for key, pattern in detail_patterns:
+        if detalles.get(key) and re.search(pattern, normalized):
+            return True
+
+    for key in ("estado", "disposicion"):
+        detail_value = _repair_text((detalles.get(key) or "").strip()).lower()
+        if detail_value and detail_value == normalized:
+            return True
+
+    return False
+
+
+def _repair_text(value: str) -> str:
+    text = value or ""
+    if any(token in text for token in ("\u00c3", "\u00c2")):
+        try:
+            repaired = text.encode("latin1").decode("utf-8")
+            if repaired:
+                text = repaired
+        except Exception:
+            pass
+    return text
 
 
 def _run_generation(job_id, source_url, agent_name, agent_whatsapp, form_url, run_id: str | None = None):
