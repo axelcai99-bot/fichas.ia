@@ -34,7 +34,7 @@ class ScraperService:
         raw_html = payload["raw_html"]
 
         log("Procesando contenido estructurado desde Firecrawl...")
-        extracted = self._extract_structured_data(markdown, html, raw_html, log)
+        extracted = self._extract_structured_data(markdown, html, raw_html, source_url, log)
 
         image_urls_llm = extracted.pop("image_urls", []) or []
         caracteristicas_raw = extracted.pop("caracteristicas", [])
@@ -142,31 +142,34 @@ class ScraperService:
     # ──────────────────────────────────────────────
 
     def _extract_structured_data(
-        self, markdown: str, html: str, raw_html: str, log: Callable[[str], None]
+        self, markdown: str, html: str, raw_html: str, source_url: str, log: Callable[[str], None]
     ) -> dict[str, Any]:
         log("Usando extracción heurística mejorada desde Markdown de Firecrawl.")
-        return self._build_fallback_from_content(markdown, raw_html or html)
+        return self._build_fallback_from_content(markdown, raw_html or html, source_url)
 
     # ──────────────────────────────────────────────
     # Extracción heurística
     # ──────────────────────────────────────────────
 
-    def _build_fallback_from_content(self, markdown: str, html: str) -> dict[str, Any]:
+    def _build_fallback_from_content(self, markdown: str, html: str, source_url: str) -> dict[str, Any]:
         focused_markdown = self._focus_listing_content(markdown)
         focused_html = self._focus_listing_content(html)
         source_text = self._merge_sources(focused_markdown, focused_html)
+        listing_payload = self._extract_listing_payload_from_html(html, source_url)
         price_match = re.search(r"(?:USD|U\$S|AR\$|\$)\s*[\d.,]+", focused_markdown or markdown, re.I)
-        titulo_html = self._extract_title_from_html(html)
-        precio_html = self._extract_price_from_html(html)
-        descripcion = self._extract_description(source_text, focused_html) or self._best_text_block(source_text)
+        titulo_html = listing_payload.get("titulo") or self._extract_title_from_html(html)
+        precio_html = listing_payload.get("precio") or self._extract_price_from_html(html)
+        descripcion = listing_payload.get("descripcion") or self._extract_description(source_text, focused_html) or self._best_text_block(source_text)
         caracteristicas = self._extract_features(source_text, focused_html)
         detalles = self._extract_detail_candidates(source_text)
         detalles_html = self._extract_detail_candidates_from_html(focused_html)
         detalles.update({k: v for k, v in detalles_html.items() if v})
+        detalles.update({k: v for k, v in (listing_payload.get("detalles") or {}).items() if v})
 
         # FIX: ubicación — intentar primero desde HTML (dirección completa)
         ubicacion = (
-            self._extract_location_from_html(focused_html)
+            listing_payload.get("ubicacion")
+            or self._extract_location_from_html(focused_html)
             or self._extract_location(source_text)
             or "Ver en el portal"
         )
@@ -188,7 +191,7 @@ class ScraperService:
             "disposicion":     detalles.get("disposicion"),
             "orientacion":     detalles.get("orientacion"),
             "caracteristicas": self._merge_feature_lists(caracteristicas, self._details_to_features(detalles)),
-            "image_urls":      self._extract_contextual_image_urls_from_html(focused_html),
+            "image_urls":      (listing_payload.get("image_urls") or []) + self._extract_contextual_image_urls_from_html(focused_html),
         }
 
     def _select_image_urls(
@@ -358,6 +361,103 @@ class ScraperService:
             return json.loads(f'"{value}"')
         except Exception:
             return unescape(value.replace("\\/", "/"))
+
+    @staticmethod
+    def _extract_listing_id_from_url(source_url: str) -> str:
+        match = re.search(r"-(\d{6,})\.html", source_url or "", re.I)
+        return match.group(1) if match else ""
+
+    @staticmethod
+    def _extract_listing_context(html: str, listing_id: str) -> str:
+        if not html or not listing_id:
+            return html
+
+        positions = [match.start() for match in re.finditer(re.escape(listing_id), html)]
+        if not positions:
+            return html
+
+        best_window = html
+        best_score = -1
+        for position in positions:
+            start = max(0, position - 30000)
+            end = min(len(html), position + 30000)
+            window = html[start:end]
+            score = 0
+            for token in (
+                "titleLocation", "streetAddress", "price", "description",
+                "m2", "cub", "tot", "bath", "room", "dorm", "image",
+            ):
+                score += window.lower().count(token.lower())
+            if score > best_score:
+                best_score = score
+                best_window = window
+        return best_window
+
+    @staticmethod
+    def _extract_listing_payload_from_html(html: str, source_url: str) -> dict[str, Any]:
+        listing_id = ScraperService._extract_listing_id_from_url(source_url)
+        context = ScraperService._extract_listing_context(html, listing_id)
+        payload: dict[str, Any] = {"detalles": {}, "image_urls": []}
+
+        def extract_string(*keys: str, min_len: int = 1, max_len: int = 4000) -> str:
+            for key in keys:
+                match = re.search(fr'"{re.escape(key)}"\s*:\s*"([^"]{{{min_len},{max_len}}})"', context, re.I)
+                if match:
+                    value = re.sub(r"\s+", " ", ScraperService._decode_json_string(match.group(1))).strip(" ,")
+                    if value:
+                        return value
+            return ""
+
+        payload["titulo"] = extract_string("title", "postingTitle", "seoTitle", "publicationTitle", min_len=8, max_len=220)
+        payload["precio"] = extract_string("formattedPrice", "priceFormatted", min_len=4, max_len=80)
+        payload["ubicacion"] = extract_string("titleLocation", "locationName", "postingLocation", min_len=8, max_len=220)
+        payload["descripcion"] = extract_string("description", "descriptionText", min_len=40, max_len=6000)
+
+        if not payload["ubicacion"]:
+            street = extract_string("streetAddress", min_len=4, max_len=180)
+            locality = extract_string("addressLocality", min_len=2, max_len=80)
+            region = extract_string("addressRegion", min_len=2, max_len=80)
+            parts = [part for part in (street, locality, region) if part]
+            if parts:
+                payload["ubicacion"] = ", ".join(dict.fromkeys(parts))
+
+        if not payload["precio"]:
+            amount_match = re.search(r'"(?:price|priceAmount)"\s*:\s*"?([\d.,]+)"?', context, re.I)
+            currency_match = re.search(r'"(?:priceCurrency|currency)"\s*:\s*"?(USD|U\$S|ARS|AR\$|\$)"?', context, re.I)
+            if amount_match:
+                currency = (currency_match.group(1) if currency_match else "USD").upper().replace("U$S", "USD")
+                prefix = "USD" if currency == "USD" else "$"
+                payload["precio"] = f"{prefix} {amount_match.group(1)}"
+
+        detail_patterns = {
+            "metros_totales": [r'"(?:surfaceTotal|totalArea|coveredSurfaceTotal|areaTotal)"\s*:\s*"?(\d+(?:[.,]\d+)?)"?'],
+            "metros_cubiertos": [r'"(?:surfaceCovered|coveredArea|area)"\s*:\s*"?(\d+(?:[.,]\d+)?)"?'],
+            "ambientes": [r'"(?:rooms|ambiences|roomAmount)"\s*:\s*"?(\d+)"?'],
+            "banos": [r'"(?:bathrooms|bathroomsAmount|bathRoomAmount)"\s*:\s*"?(\d+)"?'],
+            "dormitorios": [r'"(?:bedrooms|bedroomsAmount|bedroomAmount)"\s*:\s*"?(\d+)"?'],
+            "antiguedad": [r'"(?:age|antiquity|propertyAge)"\s*:\s*"?(.*?)"?(?:,|\})'],
+            "disposicion": [r'"(?:disposition|layout)"\s*:\s*"([^"]{2,40})"'],
+            "orientacion": [r'"(?:orientation)"\s*:\s*"([^"]{1,20})"'],
+            "estado": [r'"(?:condition|state|propertyState)"\s*:\s*"([^"]{2,60})"'],
+            "expensas": [r'"(?:expenses|expensas)"\s*:\s*"?(?:\$|AR\$|USD|U\$S)?\s*([\d.,]+)"?'],
+        }
+        for key, patterns in detail_patterns.items():
+            for pattern in patterns:
+                match = re.search(pattern, context, re.I)
+                if match:
+                    value = re.sub(r"\s+", " ", ScraperService._decode_json_string(match.group(1))).strip(" ,")
+                    if value:
+                        payload["detalles"][key] = value
+                        break
+
+        payload["image_urls"] = ScraperService._filter_image_urls(
+            re.findall(r"""https?://[^\s"'<>]+""", context, re.I)
+            + [
+                ScraperService._decode_json_string(url)
+                for url in re.findall(r"""https?:\\/\\/[^\s"'<>]+""", context, re.I)
+            ]
+        )
+        return payload
 
     @staticmethod
     def _first_h1(markdown: str) -> str:
