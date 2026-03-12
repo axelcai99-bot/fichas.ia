@@ -1,26 +1,18 @@
 FROM python:3.11-slim
 
+# Solo dependencias del sistema operativo — sin Chrome, sin Xvfb, sin chromedriver
 RUN apt-get update && apt-get install -y \
-    wget gnupg2 unzip xvfb ca-certificates \
-    python3-tk python3-dev xdotool x11-utils \
-    && install -d -m 0755 /etc/apt/keyrings \
-    && wget -qO /etc/apt/keyrings/google-chrome.gpg https://dl.google.com/linux/linux_signing_key.pub \
-    && echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list \
-    && apt-get update && apt-get install -y google-chrome-stable \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt \
-    && sbase install chromedriver latest
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
 ENV PORT=8080
-ENV DISPLAY=:99
 EXPOSE 8080
 
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
-CMD ["/entrypoint.sh"]
+CMD ["python", "app.py"]

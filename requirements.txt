@@ -1,2 +1,2 @@
 flask==3.0.3
-seleniumbase==4.47.1
+anthropic>=0.25.0
