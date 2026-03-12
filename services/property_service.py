@@ -2,6 +2,7 @@ import os
 import re
 import shutil
 import urllib.request
+from email.message import Message
 from typing import Any
 
 from repositories.property_repository import PropertyRepository
@@ -64,40 +65,50 @@ class PropertyService:
         os.makedirs(target_dir, exist_ok=True)
 
         saved: list[str] = []
+        failed = 0
         # Intentamos hasta 20 imágenes como máximo.
         for index, image_url in enumerate(image_urls[:20], start=1):
             try:
-                ext = self._guess_ext(image_url)
-                filename = f"{index:02d}{ext}"
-                file_path = os.path.join(target_dir, filename)
                 req = urllib.request.Request(
                     image_url,
                     headers={
                         "User-Agent": "Mozilla/5.0",
                         "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+                        "Accept-Language": "es-AR,es;q=0.9,en;q=0.8",
+                        "Cache-Control": "no-cache",
+                        "Pragma": "no-cache",
+                        "Origin": referer_url,
                         "Referer": referer_url,
                     },
                 )
                 # Reintento simple: a veces el CDN corta o rate-limita.
                 last_err: Exception | None = None
+                data = b""
+                ext = self._guess_ext(image_url)
                 for _ in range(2):
                     try:
                         with urllib.request.urlopen(req, timeout=30) as response:
                             data = response.read()
+                            ext = self._guess_ext(image_url, response.headers)
                         last_err = None
                         break
                     except Exception as e:
                         last_err = e
                 if last_err is not None:
                     raise last_err
+                filename = f"{index:02d}{ext}"
+                file_path = os.path.join(target_dir, filename)
                 with open(file_path, "wb") as f:
                     f.write(data)
                 saved.append(f"/static/properties/{property_id}/{filename}")
             except Exception:
+                failed += 1
                 continue
 
         if saved:
-            log(f"Imagenes descargadas: {len(saved)}")
+            log(f"Imagenes descargadas: {len(saved)} de {min(len(image_urls), 20)}")
+            if failed:
+                log(f"Imagenes no descargadas: {failed}")
         else:
             log("No se pudieron descargar imagenes, se mostraran placeholders")
             saved = [self._placeholder_svg_url()] * 5
@@ -118,12 +129,24 @@ class PropertyService:
         return True
 
     @staticmethod
-    def _guess_ext(url: str) -> str:
+    def _guess_ext(url: str, headers: Message | None = None) -> str:
+        if headers:
+            content_type = (headers.get_content_type() or "").lower()
+            if content_type == "image/png":
+                return ".png"
+            if content_type == "image/webp":
+                return ".webp"
+            if content_type == "image/avif":
+                return ".avif"
+            if content_type == "image/jpeg":
+                return ".jpg"
         low = url.lower()
         if re.search(r"\.png($|\?)", low):
             return ".png"
         if re.search(r"\.webp($|\?)", low):
             return ".webp"
+        if re.search(r"\.avif($|\?)", low):
+            return ".avif"
         if re.search(r"\.jpeg($|\?)", low):
             return ".jpeg"
         if re.search(r"\.jpg($|\?)", low):
