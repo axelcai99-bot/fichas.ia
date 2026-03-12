@@ -1,11 +1,15 @@
 import os
 import re
+from html import unescape
 import urllib.error
 import urllib.parse
 import urllib.request
 from typing import Any, Callable
 
 from firecrawl import Firecrawl
+
+
+MAX_IMAGES = 60
 
 
 class ScraperService:
@@ -21,10 +25,14 @@ class ScraperService:
         log(f"Portal detectado: {portal}")
 
         log("Obteniendo contenido vía Firecrawl...")
-        markdown, firecrawl_images = self._fetch_content(source_url, log)
+        payload = self._fetch_content(source_url, portal, log)
+        markdown = payload["markdown"]
+        firecrawl_images = payload["images"]
+        html = payload["html"]
+        raw_html = payload["raw_html"]
 
         log("Procesando contenido estructurado desde Firecrawl...")
-        extracted = self._extract_structured_data(markdown, log)
+        extracted = self._extract_structured_data(markdown, html, raw_html, log)
 
         # Separamos image_urls del resto para que PropertyService las descargue
         image_urls_llm = extracted.pop("image_urls", []) or []
@@ -33,11 +41,12 @@ class ScraperService:
         # Completamos y filtramos imágenes a partir del Markdown bruto + la lista "images" de Firecrawl.
         image_urls_from_markdown = self._extract_image_urls_from_markdown(markdown)
         image_urls_from_firecrawl = self._filter_image_urls(firecrawl_images)
+        image_urls_from_html = self._extract_image_urls_from_html(raw_html or html)
         merged_image_urls: list[str] = []
-        for url in image_urls_llm + image_urls_from_firecrawl + image_urls_from_markdown:
+        for url in image_urls_llm + image_urls_from_firecrawl + image_urls_from_html + image_urls_from_markdown:
             if url not in merged_image_urls:
                 merged_image_urls.append(url)
-        image_urls = merged_image_urls[:20]
+        image_urls = merged_image_urls[:MAX_IMAGES]
 
         detalles = {
             "ambientes":       extracted.pop("ambientes", None),
@@ -68,8 +77,8 @@ class ScraperService:
     # ──────────────────────────────────────────────
 
     def _fetch_content(
-        self, url: str, log: Callable[[str], None]
-    ) -> tuple[str, list[str]]:
+        self, url: str, portal: str, log: Callable[[str], None]
+    ) -> dict[str, Any]:
         api_key = os.getenv("FIRECRAWL_API_KEY", "").strip()
         if not api_key:
             raise RuntimeError(
@@ -80,8 +89,16 @@ class ScraperService:
         app = Firecrawl(api_key=api_key)
 
         try:
-            # Pedimos Markdown + imágenes detectadas.
-            result = app.scrape(url, formats=["markdown", "images"])
+            result = app.scrape(
+                url,
+                {
+                    "formats": ["markdown", "html", "rawHtml", "images"],
+                    "only_main_content": False,
+                    "timeout": 30000,
+                    "location": {"country": "AR", "languages": ["es-AR", "es"]},
+                    "actions": self._actions_for_portal(portal),
+                },
+            )
         except Exception as e:
             raise RuntimeError(f"Error llamando a Firecrawl: {e}") from e
 
@@ -89,9 +106,13 @@ class ScraperService:
         if isinstance(result, dict):
             markdown = (result.get("markdown") or "").strip()
             images = result.get("images") or []
+            html = (result.get("html") or "").strip()
+            raw_html = (result.get("rawHtml") or "").strip()
         else:
             markdown = (getattr(result, "markdown", "") or "").strip()
             images = getattr(result, "images", None) or []
+            html = (getattr(result, "html", "") or "").strip()
+            raw_html = (getattr(result, "rawHtml", "") or "").strip()
         if not markdown:
             raise RuntimeError("Firecrawl devolvió Markdown vacío")
 
@@ -108,31 +129,39 @@ class ScraperService:
 
         log(f"Markdown obtenido desde Firecrawl: {len(markdown)} caracteres")
         log(f"Imágenes detectadas por Firecrawl: {len(image_urls)}")
-        return markdown, image_urls
+        if raw_html or html:
+            log(f"HTML obtenido desde Firecrawl: {len(raw_html or html)} caracteres")
+        return {
+            "markdown": markdown,
+            "images": image_urls,
+            "html": html,
+            "raw_html": raw_html,
+        }
 
     # ──────────────────────────────────────────────
     # Paso 2: Markdown → dict estructurado
     # ──────────────────────────────────────────────
 
     def _extract_structured_data(
-        self, markdown: str, log: Callable[[str], None]
+        self, markdown: str, html: str, raw_html: str, log: Callable[[str], None]
     ) -> dict[str, Any]:
         log("Usando extracción heurística mejorada desde Markdown de Firecrawl.")
-        return self._build_fallback_from_markdown(markdown)
+        return self._build_fallback_from_content(markdown, raw_html or html)
 
     # ──────────────────────────────────────────────
     # Extracción heurística
     # ──────────────────────────────────────────────
 
-    def _build_fallback_from_markdown(self, markdown: str) -> dict[str, Any]:
+    def _build_fallback_from_content(self, markdown: str, html: str) -> dict[str, Any]:
+        source_text = self._merge_sources(markdown, html)
         price_match = re.search(r"(?:USD|U\$S|AR\$|\$)\s*[\d.,]+", markdown, re.I)
-        descripcion = self._extract_description_from_markdown(markdown) or self._best_text_block(markdown)
-        caracteristicas = self._extract_features_from_markdown(markdown)
-        detalles = self._extract_detail_candidates(markdown)
+        descripcion = self._extract_description(source_text, html) or self._best_text_block(source_text)
+        caracteristicas = self._extract_features(source_text, html)
+        detalles = self._extract_detail_candidates(source_text)
         return {
-            "titulo": self._extract_title(markdown) or "Propiedad en Venta",
+            "titulo": self._extract_title(source_text) or "Propiedad en Venta",
             "precio": price_match.group(0) if price_match else "Consultar precio",
-            "ubicacion": self._extract_location(markdown) or "Ver en el portal",
+            "ubicacion": self._extract_location(source_text) or "Ver en el portal",
             "descripcion": descripcion,
             "ambientes": detalles.get("ambientes"),
             "banos": detalles.get("banos"),
@@ -142,7 +171,7 @@ class ScraperService:
             "antiguedad": detalles.get("antiguedad"),
             "expensas": detalles.get("expensas"),
             "caracteristicas": caracteristicas,
-            "image_urls": self._extract_image_urls_from_markdown(markdown),
+            "image_urls": self._extract_image_urls_from_html(html) + self._extract_image_urls_from_markdown(markdown),
         }
 
     @staticmethod
@@ -199,14 +228,18 @@ class ScraperService:
                 continue
             if clean_url not in filtered:
                 filtered.append(clean_url)
-        return filtered[:20]
+        return filtered[:MAX_IMAGES]
 
     @staticmethod
-    def _extract_description_from_markdown(markdown: str) -> str:
+    def _extract_description(text: str, html: str) -> str:
         """
         Intenta extraer la descripción real desde secciones típicas del listing.
         """
-        lines = [l.strip() for l in markdown.splitlines()]
+        html_description = ScraperService._extract_description_from_html(html)
+        if html_description:
+            return html_description
+
+        lines = [l.strip() for l in text.splitlines()]
 
         def _is_noise(line: str) -> bool:
             if not line:
@@ -250,15 +283,16 @@ class ScraperService:
             if text:
                 return text
 
-        candidate = ScraperService._best_text_block(markdown)
+        candidate = ScraperService._best_text_block(text)
         return candidate.strip()
 
     @staticmethod
-    def _extract_features_from_markdown(markdown: str) -> list[str]:
+    def _extract_features(text: str, html: str) -> list[str]:
         """
         Intenta extraer características/amenities como lista a partir del Markdown.
         """
-        lines = [l.strip() for l in markdown.splitlines()]
+        html_features = ScraperService._extract_features_from_html(html)
+        lines = [l.strip() for l in text.splitlines()]
         start_idx = -1
         for i, l in enumerate(lines):
             if re.fullmatch(r"(#+\s*)?(CARACTERISTICAS|CARACTERÍSTICAS)\s*:?\s*", l, re.I):
@@ -266,7 +300,8 @@ class ScraperService:
                 break
         feats: list[str] = []
         if start_idx == -1:
-            return ScraperService._infer_feature_lines(markdown)
+            inferred = ScraperService._infer_feature_lines(text)
+            return ScraperService._merge_feature_lists(html_features, inferred)
 
         for l in lines[start_idx:]:
             if not l:
@@ -288,11 +323,8 @@ class ScraperService:
             if len(feats) >= 40:
                 break
 
-        inferred = ScraperService._infer_feature_lines(markdown)
-        for item in inferred:
-            if item not in feats:
-                feats.append(item)
-        return feats[:40]
+        inferred = ScraperService._infer_feature_lines(text)
+        return ScraperService._merge_feature_lists(html_features, feats, inferred)
 
     # ──────────────────────────────────────────────
     # Helpers
@@ -305,6 +337,146 @@ class ScraperService:
         if "argenprop"    in host: return "argenprop"
         if "mercadolibre" in host: return "mercadolibre"
         return "unknown"
+
+    @staticmethod
+    def _actions_for_portal(portal: str) -> list[dict[str, Any]]:
+        if portal != "zonaprop":
+            return [{"type": "wait", "milliseconds": 1500}]
+        return [
+            {"type": "wait", "milliseconds": 1800},
+            {
+                "type": "executeJavascript",
+                "script": """
+                (() => {
+                  const clickByText = (texts) => {
+                    const nodes = Array.from(document.querySelectorAll('button, a, span, div'));
+                    for (const node of nodes) {
+                      const text = (node.innerText || node.textContent || '').trim().toLowerCase();
+                      if (texts.some(t => text.includes(t))) {
+                        node.click();
+                        return true;
+                      }
+                    }
+                    return false;
+                  };
+                  clickByText(['aceptar', 'entendido']);
+                  clickByText(['leer más', 'ver más']);
+                  clickByText(['ver todas las fotos', 'ver fotos', 'más fotos']);
+                  return 'ok';
+                })();
+                """,
+            },
+            {"type": "wait", "milliseconds": 2200},
+            {"type": "scroll", "direction": "down"},
+            {"type": "wait", "milliseconds": 800},
+            {
+                "type": "executeJavascript",
+                "script": """
+                (() => {
+                  const clickByText = (texts) => {
+                    const nodes = Array.from(document.querySelectorAll('button, a, span, div'));
+                    for (const node of nodes) {
+                      const text = (node.innerText || node.textContent || '').trim().toLowerCase();
+                      if (texts.some(t => text.includes(t))) {
+                        node.click();
+                        return true;
+                      }
+                    }
+                    return false;
+                  };
+                  clickByText(['ver todas las fotos', 'ver fotos', 'más fotos']);
+                  return 'ok';
+                })();
+                """,
+            },
+            {"type": "wait", "milliseconds": 2200},
+        ]
+
+    @staticmethod
+    def _merge_sources(markdown: str, html: str) -> str:
+        html_text = ScraperService._html_to_text(html)
+        if not html_text:
+            return markdown
+        return f"{markdown}\n\n{html_text}"
+
+    @staticmethod
+    def _html_to_text(html: str) -> str:
+        if not html:
+            return ""
+        text = re.sub(r"(?is)<script[^>]*>.*?</script>", " ", html)
+        text = re.sub(r"(?is)<style[^>]*>.*?</style>", " ", text)
+        text = re.sub(r"(?i)<br\s*/?>", "\n", text)
+        text = re.sub(r"(?i)</p>|</div>|</li>|</section>|</article>|</h\d>", "\n", text)
+        text = re.sub(r"(?is)<[^>]+>", " ", text)
+        text = unescape(text)
+        text = text.replace("\xa0", " ")
+        text = re.sub(r"\r", "", text)
+        text = re.sub(r"\n{3,}", "\n\n", text)
+        text = re.sub(r"[ \t]{2,}", " ", text)
+        return text.strip()
+
+    @staticmethod
+    def _extract_image_urls_from_html(html: str) -> list[str]:
+        if not html:
+            return []
+        urls = re.findall(r"""https?://[^\s"'<>]+""", html, re.I)
+        return ScraperService._filter_image_urls(urls)
+
+    @staticmethod
+    def _extract_description_from_html(html: str) -> str:
+        text = ScraperService._html_to_text(html)
+        if not text:
+            return ""
+        patterns = [
+            r"Descripción\s*(.+?)(?:Leer menos|Características|Servicios|Ubicación|Mapa|Propiedades similares)",
+            r"Departamento .*?(?:Capital Federal|Buenos Aires)\.\s+(.+?)(?:LEPORE|AVISO LEGAL|XINTEL|Leer menos)",
+            r"Venta de .*?(?:Capital Federal|Buenos Aires)\.\s+(.+?)(?:LEPORE|AVISO LEGAL|XINTEL|Leer menos)",
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, text, re.I | re.S)
+            if match:
+                candidate = re.sub(r"\s+\n", "\n", match.group(1)).strip()
+                candidate = ScraperService._clean_description(candidate)
+                if len(candidate) >= 120:
+                    return candidate
+        return ""
+
+    @staticmethod
+    def _clean_description(text: str) -> str:
+        if not text:
+            return ""
+        text = re.sub(r"\bVer datos\b\.?", "", text, flags=re.I)
+        text = re.sub(r"\bAVISO LEGAL:.*$", "", text, flags=re.I | re.S)
+        text = re.sub(r"\bXINTEL.*$", "", text, flags=re.I | re.S)
+        text = re.sub(r"\bLEPORE.*$", "", text, flags=re.I | re.S)
+        text = re.sub(r"\n{3,}", "\n\n", text)
+        text = re.sub(r"[ \t]{2,}", " ", text)
+        return text.strip(" .\n")
+
+    @staticmethod
+    def _extract_features_from_html(html: str) -> list[str]:
+        text = ScraperService._html_to_text(html)
+        if not text:
+            return []
+        candidates: list[str] = []
+        for line in [l.strip(" -") for l in text.splitlines()]:
+            if len(line) < 3 or len(line) > 100:
+                continue
+            if re.search(r"\b(Departamento|Venta de|Favorito|Compartir|Notas personales|Ocultar aviso|Leer menos|Ver todas las fotos)\b", line, re.I):
+                continue
+            if re.search(r"\b(\d+\s*m[²2]|\d+\s+ambientes?|\d+\s+bañ[oa]s?|balc[oó]n|terraza|patio|parrilla|pileta|lavadero|suite|luminos[oa]|apto cr[eé]dito|seguridad|sum|quincho|jard[ií]n|cocina independiente|living-comedor|placard)\b", line, re.I):
+                candidates.append(line)
+        return ScraperService._merge_feature_lists(candidates)
+
+    @staticmethod
+    def _merge_feature_lists(*groups: list[str]) -> list[str]:
+        merged: list[str] = []
+        for group in groups:
+            for item in group:
+                cleaned = re.sub(r"\s+", " ", (item or "")).strip(" -|")
+                if cleaned and cleaned not in merged:
+                    merged.append(cleaned)
+        return merged[:40]
 
     @staticmethod
     def _extract_title(markdown: str) -> str:

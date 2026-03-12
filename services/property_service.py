@@ -8,6 +8,9 @@ from typing import Any
 from repositories.property_repository import PropertyRepository
 
 
+MAX_IMAGES = 60
+
+
 class PropertyService:
     def __init__(self, property_repo: PropertyRepository, base_dir: str):
         self.property_repo = property_repo
@@ -66,8 +69,8 @@ class PropertyService:
 
         saved: list[str] = []
         failed = 0
-        # Intentamos hasta 20 imágenes como máximo.
-        for index, image_url in enumerate(image_urls[:20], start=1):
+        # Intentamos descargar todas las imágenes útiles detectadas, con un tope amplio.
+        for index, image_url in enumerate(image_urls[:MAX_IMAGES], start=1):
             try:
                 req = urllib.request.Request(
                     image_url,
@@ -106,7 +109,7 @@ class PropertyService:
                 continue
 
         if saved:
-            log(f"Imagenes descargadas: {len(saved)} de {min(len(image_urls), 20)}")
+            log(f"Imagenes descargadas: {len(saved)} de {min(len(image_urls), MAX_IMAGES)}")
             if failed:
                 log(f"Imagenes no descargadas: {failed}")
         else:
