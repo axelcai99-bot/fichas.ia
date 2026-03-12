@@ -2,7 +2,9 @@ import os
 import queue
 import re
 import threading
+import urllib.error
 import urllib.parse
+import urllib.request
 import uuid
 import json
 import time
@@ -395,6 +397,7 @@ def property_detail(property_id: int):
     if not images:
         placeholder = PropertyService._placeholder_svg_url()
         images = [placeholder] * 5
+    images = [_build_image_src(image, prop.get("source_url", "")) for image in images]
     while len(images) < 5:
         images.append(images[-1])
 
@@ -420,6 +423,35 @@ def property_detail(property_id: int):
         survey_url=survey_url,
         inicial=(prop.get("agent_name") or "A")[0].upper(),
     )
+
+
+@app.route("/proxy-image")
+def proxy_image():
+    image_url = (request.args.get("url") or "").strip()
+    referer_url = (request.args.get("referer") or "").strip()
+    if not re.match(r"^https?://", image_url, re.I):
+        abort(400)
+
+    origin = PropertyService._origin_from_url(referer_url)
+    header_sets = [
+        PropertyService._image_request_headers(referer_url=referer_url, origin=origin, include_referer=True),
+        PropertyService._image_request_headers(referer_url=referer_url, origin=origin, include_referer=False),
+    ]
+
+    last_error: Exception | None = None
+    for headers in header_sets:
+        req = urllib.request.Request(image_url, headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=30) as response:
+                data = response.read()
+                content_type = (response.headers.get_content_type() or "").lower() or "image/jpeg"
+            return Response(data, mimetype=content_type, headers={"Cache-Control": "public, max-age=3600"})
+        except Exception as exc:
+            last_error = exc
+
+    if isinstance(last_error, urllib.error.HTTPError):
+        abort(last_error.code)
+    abort(502)
 
 
 @app.route("/propiedades")
@@ -500,6 +532,14 @@ def _merge_features(caracteristicas: list[str], detalles: dict) -> list[str]:
         _append_feature(merged, seen, cleaned)
 
     return merged
+
+
+def _build_image_src(image: str, referer_url: str) -> str:
+    value = (image or "").strip()
+    if not re.match(r"^https?://", value, re.I):
+        return value
+    query = urllib.parse.urlencode({"url": value, "referer": referer_url or ""})
+    return f"/proxy-image?{query}"
 
 
 def _ordered_detail_features(detalles: dict) -> list[str]:
