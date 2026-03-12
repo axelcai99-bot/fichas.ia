@@ -156,6 +156,8 @@ class ScraperService:
         focused_html = self._focus_listing_content(html)
         source_text = self._merge_sources(focused_markdown, focused_html)
         price_match = re.search(r"(?:USD|U\$S|AR\$|\$)\s*[\d.,]+", focused_markdown or markdown, re.I)
+        titulo_html = self._extract_title_from_html(html)
+        precio_html = self._extract_price_from_html(html)
         descripcion = self._extract_description(source_text, focused_html) or self._best_text_block(source_text)
         caracteristicas = self._extract_features(source_text, focused_html)
         detalles = self._extract_detail_candidates(source_text)
@@ -170,8 +172,8 @@ class ScraperService:
         )
 
         return {
-            "titulo":          self._extract_title(source_text) or "Propiedad en Venta",
-            "precio":          price_match.group(0) if price_match else "Consultar precio",
+            "titulo":          titulo_html or self._extract_title(source_text) or "Propiedad en Venta",
+            "precio":          precio_html or (price_match.group(0) if price_match else "Consultar precio"),
             "ubicacion":       ubicacion,
             "descripcion":     descripcion,
             "ambientes":       detalles.get("ambientes"),
@@ -584,6 +586,101 @@ class ScraperService:
         return text.strip()
 
     @staticmethod
+    def _extract_meta_content(html: str, *keys: str) -> str:
+        if not html:
+            return ""
+        for key in keys:
+            escaped = re.escape(key)
+            patterns = [
+                rf'<meta[^>]+(?:property|name)=["\']{escaped}["\'][^>]+content=["\']([^"\']+)["\']',
+                rf'<meta[^>]+content=["\']([^"\']+)["\'][^>]+(?:property|name)=["\']{escaped}["\']',
+            ]
+            for pattern in patterns:
+                match = re.search(pattern, html, re.I)
+                if match:
+                    return re.sub(r"\s+", " ", unescape(match.group(1))).strip()
+        return ""
+
+    @staticmethod
+    def _extract_listing_json_ld(html: str) -> dict[str, Any]:
+        if not html:
+            return {}
+
+        def _iter_items(node: Any) -> list[dict[str, Any]]:
+            if isinstance(node, list):
+                items: list[dict[str, Any]] = []
+                for item in node:
+                    items.extend(_iter_items(item))
+                return items
+            if isinstance(node, dict):
+                graph = node.get("@graph")
+                if isinstance(graph, list):
+                    items = [node]
+                    for item in graph:
+                        items.extend(_iter_items(item))
+                    return items
+                return [node]
+            return []
+
+        for match in re.finditer(r'<script[^>]*type=["\']application/ld\+json["\'][^>]*>(.*?)</script>', html, re.I | re.S):
+            raw = unescape(match.group(1) or "").strip()
+            if not raw:
+                continue
+            try:
+                payload = json.loads(raw)
+            except Exception:
+                continue
+            for item in _iter_items(payload):
+                if not isinstance(item, dict):
+                    continue
+                if item.get("offers") or item.get("address") or item.get("image"):
+                    return item
+        return {}
+
+    @staticmethod
+    def _extract_title_from_html(html: str) -> str:
+        title = ScraperService._extract_meta_content(html, "og:title", "twitter:title")
+        if not title:
+            json_ld = ScraperService._extract_listing_json_ld(html)
+            title = (json_ld.get("name") or "").strip() if isinstance(json_ld, dict) else ""
+        if not title:
+            match = re.search(r"<title>\s*(.*?)\s*</title>", html, re.I | re.S)
+            if match:
+                title = re.sub(r"\s+", " ", unescape(match.group(1))).strip()
+        if not title:
+            return ""
+        title = re.sub(r"\s+\|\s+Zonaprop.*$", "", title, flags=re.I)
+        return ScraperService._clean_title(title)
+
+    @staticmethod
+    def _extract_price_from_html(html: str) -> str:
+        meta_amount = ScraperService._extract_meta_content(html, "product:price:amount")
+        meta_currency = ScraperService._extract_meta_content(html, "product:price:currency")
+        if meta_amount:
+            amount = re.sub(r"[^\d.,]", "", meta_amount)
+            currency = (meta_currency or "USD").upper()
+            prefix = "USD" if currency in {"USD", "U$S"} else "$"
+            return f"{prefix} {amount}"
+
+        json_ld = ScraperService._extract_listing_json_ld(html)
+        offers = json_ld.get("offers") if isinstance(json_ld, dict) else None
+        if isinstance(offers, list):
+            offers = offers[0] if offers else None
+        if isinstance(offers, dict):
+            amount = re.sub(r"[^\d.,]", "", str(offers.get("price") or ""))
+            currency = str(offers.get("priceCurrency") or "USD").upper()
+            if amount:
+                prefix = "USD" if currency in {"USD", "U$S"} else "$"
+                return f"{prefix} {amount}"
+
+        match = re.search(r'(?:"price"|priceAmount)\s*[:=]\s*"?(USD|U\$S|AR\$|\$)?\s*([\d.,]+)"?', html, re.I)
+        if match:
+            prefix = (match.group(1) or "USD").upper().replace("U$S", "USD")
+            prefix = "USD" if prefix == "USD" else "$"
+            return f"{prefix} {match.group(2)}"
+        return ""
+
+    @staticmethod
     def _extract_image_urls_from_html(html: str) -> list[str]:
         if not html:
             return []
@@ -599,6 +696,23 @@ class ScraperService:
     def _extract_location_from_html(html: str) -> str:
         if not html:
             return ""
+        meta_location = ScraperService._extract_meta_content(html, "og:street-address", "street-address")
+        if meta_location and len(meta_location) >= 10:
+            return meta_location
+
+        json_ld = ScraperService._extract_listing_json_ld(html)
+        if isinstance(json_ld, dict):
+            address = json_ld.get("address")
+            if isinstance(address, dict):
+                street = re.sub(r"\s+", " ", str(address.get("streetAddress") or "")).strip(" ,")
+                locality_parts = [
+                    re.sub(r"\s+", " ", str(address.get(key) or "")).strip(" ,")
+                    for key in ("addressLocality", "addressRegion")
+                ]
+                locality_parts = [part for part in locality_parts if part and part.lower() not in street.lower()]
+                value = ", ".join([street] + locality_parts).strip(" ,")
+                if len(value) >= 10:
+                    return value
         html = ScraperService._focus_listing_content(html)
         # ZonaProp: <h2 class="title-location">Av. Independencia 1977...</h2>
         m = re.search(r'<h2[^>]*class="[^"]*title-location[^"]*"[^>]*>\s*([^<]{10,200})\s*</h2>', html, re.I)
