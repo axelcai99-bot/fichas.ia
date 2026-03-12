@@ -3,11 +3,12 @@ import urllib.parse
 import urllib.request
 import urllib.error
 import json
+import os
 from typing import Callable, Any
 
 
-CLOUDFLARE_ACCOUNT_ID = "TU_ACCOUNT_ID"
-CLOUDFLARE_API_TOKEN  = "TU_API_TOKEN"
+CLOUDFLARE_ACCOUNT_ID = os.getenv("CLOUDFLARE_ACCOUNT_ID", "").strip()
+CLOUDFLARE_API_TOKEN  = os.getenv("CLOUDFLARE_API_TOKEN", "").strip()
 CF_MARKDOWN_URL = (
     f"https://api.cloudflare.com/client/v4/accounts/"
     f"{CLOUDFLARE_ACCOUNT_ID}/browser-rendering/markdown"
@@ -95,6 +96,16 @@ class ScraperService:
     def _fetch_markdown(
         self, url: str, log: Callable[[str], None]
     ) -> str:
+        if not CLOUDFLARE_ACCOUNT_ID:
+            raise RuntimeError(
+                "CLOUDFLARE_ACCOUNT_ID no está configurado. "
+                "Poné el ID real de la cuenta de Cloudflare en la variable de entorno CLOUDFLARE_ACCOUNT_ID."
+            )
+        if not CLOUDFLARE_API_TOKEN:
+            raise RuntimeError(
+                "CLOUDFLARE_API_TOKEN no está configurado. "
+                "Creá un API Token con permiso 'Browser Rendering - Edit' y ponelo en CLOUDFLARE_API_TOKEN."
+            )
         payload = json.dumps({
             "url": url,
             # Para sitios con mucho JS esperamos a que quede casi sin tráfico de red.
