@@ -140,42 +140,9 @@ class ScraperService:
     def _extract_with_llm(
         self, markdown: str, log: Callable[[str], None]
     ) -> dict[str, Any]:
-        # Truncamos a ~25k chars para no exceder el contexto
-        truncated = markdown[:25_000]
-
-        api_key = os.getenv("GEMINI_API_KEY", "").strip()
-        if not api_key:
-            log("GEMINI_API_KEY no está configurada; usando fallback simple sin LLM.")
-            return self._build_fallback_from_markdown(markdown)
-
-        try:
-            import google.generativeai as genai  # pip install google-generativeai
-        except ImportError:
-            log("No está instalado google-generativeai; usando fallback simple sin LLM.")
-            return self._build_fallback_from_markdown(markdown)
-
-        genai.configure(api_key=api_key)
-
-        try:
-            # Usamos un modelo Flash de la familia 2.5 (buena calidad/precio).
-            model = genai.GenerativeModel("gemini-2.5-flash")
-            response = model.generate_content(EXTRACTION_PROMPT + truncated)
-            raw_text = (response.text or "").strip()
-        except Exception as e:
-            log(f"Error llamando a Gemini: {e}. Usando fallback simple.")
-            return self._build_fallback_from_markdown(markdown)
-
-        # Limpieza defensiva por si el LLM envuelve en ```json ... ```
-        raw_text = re.sub(r"^```(?:json)?\s*", "", raw_text)
-        raw_text = re.sub(r"\s*```$", "", raw_text)
-
-        try:
-            data = json.loads(raw_text)
-        except json.JSONDecodeError as e:
-            log(f"Warning: LLM devolvió JSON inválido, usando fallback. Error: {e}")
-            data = self._build_fallback_from_markdown(markdown)
-
-        return data
+        # Por ahora no usamos LLM: solo heurísticas sobre el Markdown de Firecrawl.
+        log("LLM deshabilitado; usando extracción heurística desde Markdown.")
+        return self._build_fallback_from_markdown(markdown)
 
     # ──────────────────────────────────────────────
     # Fallback si el LLM falla
@@ -185,11 +152,13 @@ class ScraperService:
         price_match = re.search(
             r"(?:USD|U\$S|AR\$|\$)\s*[\d.,]+", markdown, re.I
         )
+        descripcion = self._extract_description_from_markdown(markdown) or markdown[:800]
+        caracteristicas = self._extract_features_from_markdown(markdown)
         return {
             "titulo":         self._first_h1(markdown) or "Propiedad en Venta",
             "precio":         price_match.group(0) if price_match else "Consultar precio",
             "ubicacion":      "Ver en el portal",
-            "descripcion":    markdown[:500],
+            "descripcion":    descripcion,
             "ambientes":      None,
             "banos":          None,
             "metros_totales": None,
@@ -197,7 +166,7 @@ class ScraperService:
             "cocheras":       None,
             "antiguedad":     None,
             "expensas":       None,
-            "caracteristicas": [],
+            "caracteristicas": caracteristicas,
             "image_urls":     self._extract_image_urls_from_markdown(markdown),
         }
 
@@ -211,8 +180,15 @@ class ScraperService:
         """
         Extrae hasta 20 URLs de imágenes desde el Markdown, filtrando logos, íconos y placeholders.
         """
-        # Encontramos todas las URLs de imágenes comunes.
-        urls = re.findall(r"https?://\S+\.(?:jpg|jpeg|png|webp)", markdown, re.I)
+        # 1) URLs en sintaxis Markdown de imagen: ![alt](url)
+        md_image_urls = re.findall(r"!\[[^\]]*\]\((https?://[^\s)]+)\)", markdown, re.I)
+        # 2) URLs sueltas, permitiendo querystring: .jpg?... .png?... etc
+        raw_urls = re.findall(
+            r"https?://[^\s)]+?\.(?:jpg|jpeg|png|webp)(?:\?[^\s)]*)?",
+            markdown,
+            re.I,
+        )
+        urls = md_image_urls + raw_urls
         blacklist_substrings = (
             "logo",
             "favicon",
@@ -223,6 +199,7 @@ class ScraperService:
             "notesicon",
             "fav-",
             "fav_icon",
+            ".svg",
         )
 
         filtered: list[str] = []
@@ -230,10 +207,85 @@ class ScraperService:
             lu = url.lower()
             if any(bad in lu for bad in blacklist_substrings):
                 continue
+            # descartamos recursos no-foto comunes
+            if not re.search(r"\.(jpg|jpeg|png|webp)(\?|$)", lu):
+                continue
             if url not in filtered:
                 filtered.append(url)
 
         return filtered[:20]
+
+    @staticmethod
+    def _extract_description_from_markdown(markdown: str) -> str:
+        """
+        Intenta extraer la descripción real desde secciones típicas del listing.
+        """
+        lines = [l.strip() for l in markdown.splitlines()]
+        # Buscamos un encabezado tipo "DESCRIPCION" / "Descripción"
+        start_idx = -1
+        for i, l in enumerate(lines):
+            if re.fullmatch(r"(DESCRIPCION|DESCRIPCIÓN|DESCRIPCION:|DESCRIPCIÓN:)", l, re.I):
+                start_idx = i + 1
+                break
+        if start_idx == -1:
+            return ""
+
+        collected: list[str] = []
+        for l in lines[start_idx:]:
+            if not l:
+                if collected:
+                    collected.append("")  # preserva párrafos
+                continue
+            # Cortamos si parece otra sección
+            if re.fullmatch(r"[A-ZÁÉÍÓÚÑ ]{4,}", l) and len(collected) > 3:
+                break
+            # Filtramos ruido típico
+            if re.search(r"\b(Favorito|Compartir|Notas personales|Ocultar aviso)\b", l, re.I):
+                continue
+            collected.append(l)
+
+            if sum(len(x) for x in collected) > 2500:
+                break
+
+        text = "\n".join(collected).strip()
+        return text
+
+    @staticmethod
+    def _extract_features_from_markdown(markdown: str) -> list[str]:
+        """
+        Intenta extraer características/amenities como lista a partir del Markdown.
+        """
+        lines = [l.strip() for l in markdown.splitlines()]
+        start_idx = -1
+        for i, l in enumerate(lines):
+            if re.fullmatch(r"(CARACTERISTICAS|CARACTERÍSTICAS|CARACTERISTICAS:|CARACTERÍSTICAS:)", l, re.I):
+                start_idx = i + 1
+                break
+        if start_idx == -1:
+            return []
+
+        feats: list[str] = []
+        for l in lines[start_idx:]:
+            if not l:
+                continue
+            if re.fullmatch(r"[A-ZÁÉÍÓÚÑ ]{4,}", l) and len(feats) >= 5:
+                break
+            if re.search(r"\b(Favorito|Compartir|Notas personales|Ocultar aviso)\b", l, re.I):
+                continue
+            m = re.match(r"^[-*]\s+(.+)$", l)
+            if m:
+                val = m.group(1).strip()
+            else:
+                # algunas páginas listan características en líneas sueltas
+                val = l.strip()
+            if not val or len(val) > 120:
+                continue
+            if val not in feats:
+                feats.append(val)
+            if len(feats) >= 40:
+                break
+
+        return feats
 
     # ──────────────────────────────────────────────
     # Helpers
