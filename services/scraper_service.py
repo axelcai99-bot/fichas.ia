@@ -160,18 +160,26 @@ class ScraperService:
         # Truncamos a ~12k chars para no exceder el contexto
         truncated = markdown[:12_000]
 
-        import anthropic  # pip install anthropic
-        client = anthropic.Anthropic()   # lee ANTHROPIC_API_KEY del entorno
+        api_key = os.getenv("GEMINI_API_KEY", "").strip()
+        if not api_key:
+            log("GEMINI_API_KEY no está configurada; usando fallback simple sin LLM.")
+            return self._build_fallback_from_markdown(markdown)
 
-        message = client.messages.create(
-            model="claude-3-haiku-20240307",   # más barato, suficiente para extracción
-            max_tokens=1024,
-            messages=[{
-                "role": "user",
-                "content": EXTRACTION_PROMPT + truncated,
-            }],
-        )
-        raw_text = message.content[0].text.strip()
+        try:
+            import google.generativeai as genai  # pip install google-generativeai
+        except ImportError:
+            log("No está instalado google-generativeai; usando fallback simple sin LLM.")
+            return self._build_fallback_from_markdown(markdown)
+
+        genai.configure(api_key=api_key)
+
+        try:
+            model = genai.GenerativeModel("gemini-1.5-flash")
+            response = model.generate_content(EXTRACTION_PROMPT + truncated)
+            raw_text = (response.text or "").strip()
+        except Exception as e:
+            log(f"Error llamando a Gemini: {e}. Usando fallback simple.")
+            return self._build_fallback_from_markdown(markdown)
 
         # Limpieza defensiva por si el LLM envuelve en ```json ... ```
         raw_text = re.sub(r"^```(?:json)?\s*", "", raw_text)
