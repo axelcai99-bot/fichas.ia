@@ -32,7 +32,7 @@ from services.scraper_service import ScraperService
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "fichas-ia-secret-2024-cambiar-en-produccion")
+app.secret_key = os.environ.get("SECRET_KEY") or os.urandom(32).hex()
 
 init_db()
 
