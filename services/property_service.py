@@ -98,8 +98,16 @@ class PropertyService:
                 with open(file_path, "wb") as f:
                     f.write(data)
                 saved.append(f"/static/properties/{property_id}/{filename}")
-            except Exception:
+            except Exception as e:
                 failed += 1
+                try:
+                    preview_url = image_url
+                    if len(preview_url) > 140:
+                        preview_url = preview_url[:140] + "..."
+                    log(f"No se pudo descargar la imagen #{index} ({preview_url}): {type(e).__name__}: {e}")
+                except Exception:
+                    # Si fallara el propio log, no rompemos el flujo de descarga.
+                    pass
                 continue
 
         if saved:
@@ -165,7 +173,12 @@ class PropertyService:
     @staticmethod
     def _image_request_headers(*, referer_url: str, origin: str, include_referer: bool) -> dict[str, str]:
         headers = {
-            "User-Agent": "Mozilla/5.0",
+            # User-Agent más realista para tratar de evitar algunos bloqueos anti-bot.
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/122.0.0.0 Safari/537.36"
+            ),
             "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
             "Accept-Language": "es-AR,es;q=0.9,en;q=0.8",
             "Cache-Control": "no-cache",
