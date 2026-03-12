@@ -59,7 +59,7 @@ class ScraperService:
         log(f"Portal detectado: {portal}")
 
         log("Obteniendo contenido vía Firecrawl...")
-        markdown = self._fetch_markdown(source_url, log)
+        markdown, firecrawl_images = self._fetch_content(source_url, log)
 
         log("Extrayendo datos estructurados con LLM...")
         extracted = self._extract_with_llm(markdown, log)
@@ -68,10 +68,11 @@ class ScraperService:
         image_urls_llm = extracted.pop("image_urls", []) or []
         caracteristicas_raw = extracted.pop("caracteristicas", [])
 
-        # Completamos y filtramos imágenes a partir del Markdown bruto.
+        # Completamos y filtramos imágenes a partir del Markdown bruto + la lista "images" de Firecrawl.
         image_urls_from_markdown = self._extract_image_urls_from_markdown(markdown)
+        image_urls_from_firecrawl = self._filter_image_urls(firecrawl_images)
         merged_image_urls: list[str] = []
-        for url in image_urls_llm + image_urls_from_markdown:
+        for url in image_urls_llm + image_urls_from_firecrawl + image_urls_from_markdown:
             if url not in merged_image_urls:
                 merged_image_urls.append(url)
         image_urls = merged_image_urls[:20]
@@ -104,9 +105,9 @@ class ScraperService:
     # Paso 1: Firecrawl → Markdown
     # ──────────────────────────────────────────────
 
-    def _fetch_markdown(
+    def _fetch_content(
         self, url: str, log: Callable[[str], None]
-    ) -> str:
+    ) -> tuple[str, list[str]]:
         api_key = os.getenv("FIRECRAWL_API_KEY", "").strip()
         if not api_key:
             raise RuntimeError(
@@ -117,21 +118,35 @@ class ScraperService:
         app = Firecrawl(api_key=api_key)
 
         try:
-            # Pedimos específicamente Markdown limpio.
-            result = app.scrape(url, formats=["markdown"])
+            # Pedimos Markdown + imágenes detectadas.
+            result = app.scrape(url, formats=["markdown", "images"])
         except Exception as e:
             raise RuntimeError(f"Error llamando a Firecrawl: {e}") from e
 
         # El SDK puede devolver un dict o un objeto Document.
         if isinstance(result, dict):
             markdown = (result.get("markdown") or "").strip()
+            images = result.get("images") or []
         else:
             markdown = (getattr(result, "markdown", "") or "").strip()
+            images = getattr(result, "images", None) or []
         if not markdown:
             raise RuntimeError("Firecrawl devolvió Markdown vacío")
 
+        # Normalizamos images a lista de strings
+        image_urls: list[str] = []
+        if isinstance(images, list):
+            for item in images:
+                if isinstance(item, str):
+                    image_urls.append(item)
+                elif isinstance(item, dict):
+                    u = item.get("url") or item.get("src")
+                    if isinstance(u, str):
+                        image_urls.append(u)
+
         log(f"Markdown obtenido desde Firecrawl: {len(markdown)} caracteres")
-        return markdown
+        log(f"Imágenes detectadas por Firecrawl: {len(image_urls)}")
+        return markdown, image_urls
 
     # ──────────────────────────────────────────────
     # Paso 2: LLM → dict estructurado
@@ -216,39 +231,94 @@ class ScraperService:
         return filtered[:20]
 
     @staticmethod
+    def _filter_image_urls(urls: list[str]) -> list[str]:
+        """
+        Filtra URLs de imágenes (logos/íconos) y deja hasta 20.
+        """
+        blacklist_substrings = (
+            "logo",
+            "favicon",
+            "icon",
+            "sprite",
+            "placeholder",
+            "watermark",
+            "notesicon",
+            "fav-",
+            "fav_icon",
+            ".svg",
+        )
+        filtered: list[str] = []
+        for url in urls:
+            if not isinstance(url, str):
+                continue
+            lu = url.lower()
+            if any(bad in lu for bad in blacklist_substrings):
+                continue
+            if not re.search(r"\.(jpg|jpeg|png|webp)(\?|$)", lu):
+                continue
+            if url not in filtered:
+                filtered.append(url)
+        return filtered[:20]
+
+    @staticmethod
     def _extract_description_from_markdown(markdown: str) -> str:
         """
         Intenta extraer la descripción real desde secciones típicas del listing.
         """
         lines = [l.strip() for l in markdown.splitlines()]
-        # Buscamos un encabezado tipo "DESCRIPCION" / "Descripción"
+
+        def _is_noise(line: str) -> bool:
+            if not line:
+                return False
+            # Texto típico de UI de Zonaprop
+            if re.search(r"\b(Favorito|Compartir|Notas personales|Ocultar aviso|Ver menos)\b", line, re.I):
+                return True
+            # Líneas que son casi todo imágenes markdown
+            if re.fullmatch(r"!?(\[[^\]]*\])?!?\[[^\]]*\]\([^)]+\)\s*", line):
+                return True
+            if re.search(r"!\[[^\]]*\]\(https?://", line):
+                return True
+            # Si no tiene letras (solo números/símbolos), la descartamos
+            if not re.search(r"[A-Za-zÁÉÍÓÚáéíóúñ]", line):
+                return True
+            return False
+
+        # 1) Intentamos usar una sección marcada como "DESCRIPCION"
         start_idx = -1
         for i, l in enumerate(lines):
-            if re.fullmatch(r"(DESCRIPCION|DESCRIPCIÓN|DESCRIPCION:|DESCRIPCIÓN:)", l, re.I):
+            if re.fullmatch(r"(#+\s*)?(DESCRIPCION|DESCRIPCIÓN)\s*:?\s*", l, re.I):
                 start_idx = i + 1
                 break
-        if start_idx == -1:
-            return ""
 
         collected: list[str] = []
-        for l in lines[start_idx:]:
-            if not l:
-                if collected:
-                    collected.append("")  # preserva párrafos
-                continue
-            # Cortamos si parece otra sección
-            if re.fullmatch(r"[A-ZÁÉÍÓÚÑ ]{4,}", l) and len(collected) > 3:
-                break
-            # Filtramos ruido típico
-            if re.search(r"\b(Favorito|Compartir|Notas personales|Ocultar aviso)\b", l, re.I):
+        if start_idx != -1:
+            for l in lines[start_idx:]:
+                if not l:
+                    if collected:
+                        collected.append("")  # preserva párrafos
+                    continue
+                # Cortamos si parece otra sección
+                if re.fullmatch(r"[A-ZÁÉÍÓÚÑ ]{4,}", l) and len(collected) > 3:
+                    break
+                if _is_noise(l):
+                    continue
+                collected.append(l)
+                if sum(len(x) for x in collected) > 2500:
+                    break
+            text = "\n".join(collected).strip()
+            if text:
+                return text
+
+        # 2) Fallback global: tomamos las primeras líneas "de contenido" del Markdown completo
+        collected = []
+        for l in lines:
+            if _is_noise(l):
                 continue
             collected.append(l)
-
             if sum(len(x) for x in collected) > 2500:
                 break
 
-        text = "\n".join(collected).strip()
-        return text
+        return "\n".join(collected).strip()
 
     @staticmethod
     def _extract_features_from_markdown(markdown: str) -> list[str]:
@@ -258,7 +328,7 @@ class ScraperService:
         lines = [l.strip() for l in markdown.splitlines()]
         start_idx = -1
         for i, l in enumerate(lines):
-            if re.fullmatch(r"(CARACTERISTICAS|CARACTERÍSTICAS|CARACTERISTICAS:|CARACTERÍSTICAS:)", l, re.I):
+            if re.fullmatch(r"(#+\s*)?(CARACTERISTICAS|CARACTERÍSTICAS)\s*:?\s*", l, re.I):
                 start_idx = i + 1
                 break
         if start_idx == -1:
