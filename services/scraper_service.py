@@ -105,8 +105,11 @@ class ScraperService:
         except Exception as e:
             raise RuntimeError(f"Error llamando a Firecrawl: {e}") from e
 
-        # En el SDK, cuando se pide "markdown", suele venir en result["markdown"].
-        markdown = (result.get("markdown") or "").strip()
+        # El SDK puede devolver un dict o un objeto Document.
+        if isinstance(result, dict):
+            markdown = (result.get("markdown") or "").strip()
+        else:
+            markdown = (getattr(result, "markdown", "") or "").strip()
         if not markdown:
             raise RuntimeError("Firecrawl devolvió Markdown vacío")
 
