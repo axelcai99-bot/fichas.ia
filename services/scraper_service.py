@@ -369,6 +369,12 @@ class ScraperService:
 
     @staticmethod
     def _extract_listing_context(html: str, listing_id: str) -> str:
+        listing_object = ScraperService._extract_listing_object(html, listing_id)
+        if listing_object:
+            try:
+                return json.dumps(listing_object, ensure_ascii=False)
+            except Exception:
+                pass
         if not html or not listing_id:
             return html
 
@@ -392,6 +398,107 @@ class ScraperService:
                 best_score = score
                 best_window = window
         return best_window
+
+    @staticmethod
+    def _extract_listing_object(html: str, listing_id: str) -> dict[str, Any]:
+        if not html or not listing_id:
+            return {}
+
+        script_matches = re.finditer(
+            r'<script[^>]*>\s*(.*?)\s*</script>',
+            html,
+            re.I | re.S,
+        )
+        for match in script_matches:
+            script_content = unescape(match.group(1) or "")
+            if listing_id not in script_content:
+                continue
+
+            candidates: list[Any] = []
+            stripped = script_content.strip().rstrip(";")
+            for candidate in (stripped,):
+                try:
+                    candidates.append(json.loads(candidate))
+                except Exception:
+                    pass
+
+            object_text = ScraperService._extract_json_object_containing(script_content, listing_id)
+            if object_text:
+                try:
+                    candidates.append(json.loads(object_text))
+                except Exception:
+                    pass
+
+            for candidate in candidates:
+                listing_node = ScraperService._find_listing_node(candidate, listing_id)
+                if listing_node:
+                    return listing_node
+
+        return {}
+
+    @staticmethod
+    def _extract_json_object_containing(text: str, needle: str) -> str:
+        position = text.find(needle)
+        if position == -1:
+            return ""
+
+        start = position
+        depth = 0
+        in_string = False
+        escape = False
+        while start >= 0:
+            ch = text[start]
+            if ch == '"' and not escape:
+                in_string = not in_string
+            if not in_string:
+                if ch == '{':
+                    depth -= 1
+                    if depth <= 0:
+                        break
+                elif ch == '}':
+                    depth += 1
+            escape = (ch == '\\' and not escape)
+            start -= 1
+
+        if start < 0 or text[start] != '{':
+            return ""
+
+        end = start
+        depth = 0
+        in_string = False
+        escape = False
+        while end < len(text):
+            ch = text[end]
+            if ch == '"' and not escape:
+                in_string = not in_string
+            if not in_string:
+                if ch == '{':
+                    depth += 1
+                elif ch == '}':
+                    depth -= 1
+                    if depth == 0:
+                        return text[start:end + 1]
+            escape = (ch == '\\' and not escape)
+            end += 1
+        return ""
+
+    @staticmethod
+    def _find_listing_node(node: Any, listing_id: str) -> dict[str, Any]:
+        listing_id = str(listing_id)
+        if isinstance(node, dict):
+            values = [str(value) for value in node.values() if isinstance(value, (str, int))]
+            if listing_id in values or any(listing_id in value for value in values):
+                return node
+            for value in node.values():
+                found = ScraperService._find_listing_node(value, listing_id)
+                if found:
+                    return found
+        elif isinstance(node, list):
+            for item in node:
+                found = ScraperService._find_listing_node(item, listing_id)
+                if found:
+                    return found
+        return {}
 
     @staticmethod
     def _extract_listing_payload_from_html(html: str, source_url: str) -> dict[str, Any]:
