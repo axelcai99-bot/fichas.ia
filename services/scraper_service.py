@@ -112,6 +112,14 @@ class ScraperService:
             "gotoOptions": {
                 "waitUntil": "networkidle0",
             },
+            # Intentamos parecer un navegador real para que ZonaProp no bloquee.
+            "addScriptTag": [{
+                "content": "Object.defineProperty(navigator,'webdriver',{get:()=>undefined})"
+            }],
+            "setExtraHTTPHeaders": {
+                "Accept-Language": "es-AR,es;q=0.9",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            },
         }).encode()
 
         req = urllib.request.Request(
@@ -157,8 +165,8 @@ class ScraperService:
     def _extract_with_llm(
         self, markdown: str, log: Callable[[str], None]
     ) -> dict[str, Any]:
-        # Truncamos a ~12k chars para no exceder el contexto
-        truncated = markdown[:12_000]
+        # Truncamos a ~25k chars para no exceder el contexto
+        truncated = markdown[:25_000]
 
         api_key = os.getenv("GEMINI_API_KEY", "").strip()
         if not api_key:
