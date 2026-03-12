@@ -91,13 +91,12 @@ class ScraperService:
         try:
             result = app.scrape(
                 url,
-                {
-                    "formats": ["markdown", "html", "rawHtml", "images"],
-                    "only_main_content": False,
-                    "timeout": 30000,
-                    "location": {"country": "AR", "languages": ["es-AR", "es"]},
-                    "actions": self._actions_for_portal(portal),
-                },
+                formats=["markdown", "html", "rawHtml", "images"],
+                only_main_content=False,
+                wait_for=1500,
+                timeout=30000,
+                location={"country": "AR", "languages": ["es-AR", "es"]},
+                actions=self._actions_for_portal(portal),
             )
         except Exception as e:
             raise RuntimeError(f"Error llamando a Firecrawl: {e}") from e
@@ -107,12 +106,12 @@ class ScraperService:
             markdown = (result.get("markdown") or "").strip()
             images = result.get("images") or []
             html = (result.get("html") or "").strip()
-            raw_html = (result.get("rawHtml") or "").strip()
+            raw_html = (result.get("rawHtml") or result.get("raw_html") or "").strip()
         else:
             markdown = (getattr(result, "markdown", "") or "").strip()
             images = getattr(result, "images", None) or []
             html = (getattr(result, "html", "") or "").strip()
-            raw_html = (getattr(result, "rawHtml", "") or "").strip()
+            raw_html = (getattr(result, "rawHtml", None) or getattr(result, "raw_html", "") or "").strip()
         if not markdown:
             raise RuntimeError("Firecrawl devolvió Markdown vacío")
 
