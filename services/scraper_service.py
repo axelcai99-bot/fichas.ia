@@ -164,7 +164,7 @@ class ScraperService:
         client = anthropic.Anthropic()   # lee ANTHROPIC_API_KEY del entorno
 
         message = client.messages.create(
-            model="claude-3-5-sonnet-20241022",   # modelo actual de alta calidad
+            model="claude-3-haiku-20240307",   # más barato, suficiente para extracción
             max_tokens=1024,
             messages=[{
                 "role": "user",
