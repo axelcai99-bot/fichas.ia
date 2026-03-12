@@ -6,13 +6,7 @@ import json
 import os
 from typing import Callable, Any
 
-
-CLOUDFLARE_ACCOUNT_ID = os.getenv("CLOUDFLARE_ACCOUNT_ID", "").strip()
-CLOUDFLARE_API_TOKEN  = os.getenv("CLOUDFLARE_API_TOKEN", "").strip()
-CF_MARKDOWN_URL = (
-    f"https://api.cloudflare.com/client/v4/accounts/"
-    f"{CLOUDFLARE_ACCOUNT_ID}/browser-rendering/markdown"
-)
+from firecrawl import Firecrawl
 
 
 EXTRACTION_PROMPT = """
@@ -90,72 +84,32 @@ class ScraperService:
         }
 
     # ──────────────────────────────────────────────
-    # Paso 1: Cloudflare /markdown → Markdown
+    # Paso 1: Firecrawl → Markdown
     # ──────────────────────────────────────────────
 
     def _fetch_markdown(
         self, url: str, log: Callable[[str], None]
     ) -> str:
-        if not CLOUDFLARE_ACCOUNT_ID:
+        api_key = os.getenv("FIRECRAWL_API_KEY", "").strip()
+        if not api_key:
             raise RuntimeError(
-                "CLOUDFLARE_ACCOUNT_ID no está configurado. "
-                "Poné el ID real de la cuenta de Cloudflare en la variable de entorno CLOUDFLARE_ACCOUNT_ID."
+                "FIRECRAWL_API_KEY no está configurada. "
+                "Creá un API key de Firecrawl y ponelo en la variable de entorno FIRECRAWL_API_KEY."
             )
-        if not CLOUDFLARE_API_TOKEN:
-            raise RuntimeError(
-                "CLOUDFLARE_API_TOKEN no está configurado. "
-                "Creá un API Token con permiso 'Browser Rendering - Edit' y ponelo en CLOUDFLARE_API_TOKEN."
-            )
-        payload = json.dumps({
-            "url": url,
-            # Para sitios con mucho JS esperamos a que quede casi sin tráfico de red.
-            "gotoOptions": {
-                "waitUntil": "networkidle0",
-            },
-            # Intentamos parecer un navegador real para que ZonaProp no bloquee.
-            "addScriptTag": [{
-                "content": "Object.defineProperty(navigator,'webdriver',{get:()=>undefined})"
-            }],
-            "setExtraHTTPHeaders": {
-                "Accept-Language": "es-AR,es;q=0.9",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            },
-        }).encode()
 
-        req = urllib.request.Request(
-            CF_MARKDOWN_URL,
-            data=payload,
-            headers={
-                "Authorization": f"Bearer {CLOUDFLARE_API_TOKEN}",
-                "Content-Type":  "application/json",
-            },
-            method="POST",
-        )
+        app = Firecrawl(api_key=api_key)
+
         try:
-            with urllib.request.urlopen(req, timeout=60) as resp:
-                body = json.loads(resp.read())
-        except urllib.error.HTTPError as e:
-            # Leemos el cuerpo para entender por qué Cloudflare devuelve 404/4xx
-            try:
-                error_body = e.read().decode("utf-8", errors="ignore")
-            except Exception:
-                error_body = ""
-            raise RuntimeError(
-                f"Error HTTP en Cloudflare /markdown: {e.code} {e.reason} - {error_body}"
-            ) from e
+            # Pedimos específicamente Markdown limpio.
+            result = app.scrape(url, params={"formats": ["markdown"]})
         except Exception as e:
-            raise RuntimeError(f"Error en Cloudflare /markdown: {e}") from e
+            raise RuntimeError(f"Error llamando a Firecrawl: {e}") from e
 
-        if not body.get("success"):
-            errors = body.get("errors", [])
-            raise RuntimeError(f"Cloudflare /markdown falló: {errors}")
-
-        # En el endpoint /markdown, result es directamente un string con el Markdown.
-        markdown = body.get("result") or ""
+        markdown = (result.get("markdown") or "").strip()
         if not markdown:
-            raise RuntimeError("Cloudflare devolvió Markdown vacío")
+            raise RuntimeError("Firecrawl devolvió Markdown vacío")
 
-        log(f"Markdown obtenido: {len(markdown)} caracteres")
+        log(f"Markdown obtenido desde Firecrawl: {len(markdown)} caracteres")
         return markdown
 
     # ──────────────────────────────────────────────
