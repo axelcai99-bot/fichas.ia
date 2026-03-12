@@ -148,15 +148,5 @@ class PropertyRepository:
                 )
             else:
                 cur = conn.execute("DELETE FROM properties WHERE id = ?", (property_id,))
-            if cur.rowcount > 0:
-                max_row = conn.execute("SELECT COALESCE(MAX(id), 0) AS max_id FROM properties").fetchone()
-                max_id = int(max_row["max_id"]) if max_row else 0
-                if max_id <= 0:
-                    conn.execute("DELETE FROM sqlite_sequence WHERE name = 'properties'")
-                else:
-                    conn.execute(
-                        "UPDATE sqlite_sequence SET seq = ? WHERE name = 'properties'",
-                        (max_id,),
-                    )
             conn.commit()
             return cur.rowcount > 0
