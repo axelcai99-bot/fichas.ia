@@ -12,13 +12,16 @@ from firecrawl import Firecrawl
 EXTRACTION_PROMPT = """
 Sos un extractor de datos de propiedades inmobiliarias argentinas.
 Se te dará el contenido Markdown de una página de listing.
+El Markdown puede incluir mucho ruido de interfaz (botones como Favorito, Compartir,
+Notas personales, etc.). Ignorá todo lo que no sea información real de la propiedad.
+
 Devolvé ÚNICAMENTE un objeto JSON válido con exactamente estas claves:
 
 {
   "titulo": "string — título principal de la propiedad",
   "precio": "string — precio tal como aparece, ej: USD 150.000 o $ 80.000.000",
   "ubicacion": "string — dirección o barrio",
-  "descripcion": "string — descripción completa de la propiedad",
+  "descripcion": "string — descripción completa y legible de la propiedad (al menos 200 caracteres si es posible)",
   "ambientes": "string o null — número de ambientes si aparece",
   "banos": "string o null — número de baños",
   "metros_totales": "string o null — m² totales",
@@ -26,9 +29,15 @@ Devolvé ÚNICAMENTE un objeto JSON válido con exactamente estas claves:
   "cocheras": "string o null",
   "antiguedad": "string o null",
   "expensas": "string o null — expensas mensuales si aparecen",
-  "caracteristicas": ["array de strings — amenities, orientación, etc."],
-  "image_urls": ["array de URLs de imágenes que aparezcan en el Markdown"]
+  "caracteristicas": ["array de strings — amenities, terminaciones, servicios, orientación, etc. (cada item corto y descriptivo)"],
+  "image_urls": ["array de hasta 20 URLs de fotos grandes de la propiedad (interiores/exteriores). Excluí logos, íconos, favicons, placeholders o marcas de agua evidentes."]
 }
+
+Reglas importantes:
+- Ignorá texto de UI como Favorito, Compartir, Notas personales, botones o menús.
+- Para "descripcion", usá el texto corrido que describa la propiedad (ambientes, estado, amenities, ubicación, etc.).
+- Para "caracteristicas", devolvé una lista de bullets limpios (sin numeración ni texto de interfaz).
+- Para "image_urls", incluí solo fotos de la propiedad (interior, exterior, planos). Excluí cualquier logo de inmobiliaria, favicon, ícono pequeño o sprite.
 
 Si un campo no está disponible, usá null (no omitas la clave).
 No incluyas explicaciones, solo el JSON.
@@ -49,15 +58,23 @@ class ScraperService:
         portal = self._detect_portal(source_url)
         log(f"Portal detectado: {portal}")
 
-        log("Obteniendo contenido vía Cloudflare Browser Rendering...")
+        log("Obteniendo contenido vía Firecrawl...")
         markdown = self._fetch_markdown(source_url, log)
 
         log("Extrayendo datos estructurados con LLM...")
         extracted = self._extract_with_llm(markdown, log)
 
         # Separamos image_urls del resto para que PropertyService las descargue
-        image_urls = extracted.pop("image_urls", [])
+        image_urls_llm = extracted.pop("image_urls", []) or []
         caracteristicas_raw = extracted.pop("caracteristicas", [])
+
+        # Completamos y filtramos imágenes a partir del Markdown bruto.
+        image_urls_from_markdown = self._extract_image_urls_from_markdown(markdown)
+        merged_image_urls: list[str] = []
+        for url in image_urls_llm + image_urls_from_markdown:
+            if url not in merged_image_urls:
+                merged_image_urls.append(url)
+        image_urls = merged_image_urls[:20]
 
         detalles = {
             "ambientes":       extracted.pop("ambientes", None),
@@ -181,13 +198,42 @@ class ScraperService:
             "antiguedad":     None,
             "expensas":       None,
             "caracteristicas": [],
-            "image_urls":     re.findall(r"https?://\S+\.(?:jpg|jpeg|png|webp)", markdown, re.I),
+            "image_urls":     self._extract_image_urls_from_markdown(markdown),
         }
 
     @staticmethod
     def _first_h1(markdown: str) -> str:
         m = re.search(r"^#\s+(.+)$", markdown, re.M)
         return m.group(1).strip() if m else ""
+
+    @staticmethod
+    def _extract_image_urls_from_markdown(markdown: str) -> list[str]:
+        """
+        Extrae hasta 20 URLs de imágenes desde el Markdown, filtrando logos, íconos y placeholders.
+        """
+        # Encontramos todas las URLs de imágenes comunes.
+        urls = re.findall(r"https?://\S+\.(?:jpg|jpeg|png|webp)", markdown, re.I)
+        blacklist_substrings = (
+            "logo",
+            "favicon",
+            "icon",
+            "sprite",
+            "placeholder",
+            "watermark",
+            "notesicon",
+            "fav-",
+            "fav_icon",
+        )
+
+        filtered: list[str] = []
+        for url in urls:
+            lu = url.lower()
+            if any(bad in lu for bad in blacklist_substrings):
+                continue
+            if url not in filtered:
+                filtered.append(url)
+
+        return filtered[:20]
 
     # ──────────────────────────────────────────────
     # Helpers
