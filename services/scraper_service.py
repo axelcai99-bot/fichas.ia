@@ -241,6 +241,9 @@ class ScraperService:
                 return False
             if re.search(r"\b(Favorito|Compartir|Notas personales|Ocultar aviso|Ver menos)\b", line, re.I):
                 return True
+            # FIX: líneas que son links markdown [texto](url) — típico de sidebars de ZonaProp
+            if re.search(r"^\[.+\]\(https?://", line):
+                return True
             if re.fullmatch(r"!?(\[[^\]]*\])?!?\[[^\]]*\]\([^)]+\)\s*", line):
                 return True
             if re.search(r"!\[[^\]]*\]\(https?://", line):
@@ -258,6 +261,9 @@ class ScraperService:
         collected: list[str] = []
         if start_idx != -1:
             for l in lines[start_idx:]:
+                # FIX: cortar también en el formulario de preguntas de ZonaProp
+                if re.search(r"Preguntas para la inmobiliaria|Seleccioná una o más preguntas", l, re.I):
+                    break
                 if not l:
                     if collected:
                         collected.append("")
@@ -266,12 +272,15 @@ class ScraperService:
                     break
                 if _is_noise(l):
                     continue
+                # FIX: saltar la palabra "completa" suelta que ZonaProp pone como subtítulo
+                if l.strip().lower() == "completa":
+                    continue
                 collected.append(l)
                 if sum(len(x) for x in collected) > 2500:
                     break
-            text = "\n".join(collected).strip()
-            if text:
-                return text
+            text_result = "\n".join(collected).strip()
+            if text_result:
+                return text_result
 
         candidate = ScraperService._best_text_block(text)
         return candidate.strip()
@@ -418,16 +427,17 @@ class ScraperService:
         if not text:
             return ""
         patterns = [
-            r"Descripción\s*(.+?)(?:Leer menos|Características|Servicios|Ubicación|Mapa|Propiedades similares)",
-            r"(Venta de .*?(?:Capital Federal|Buenos Aires)\..+?)(?:LEPORE|AVISO LEGAL|XINTEL|Leer menos)",
-            r"(Departamento .*?(?:Capital Federal|Buenos Aires)\..+?)(?:LEPORE|AVISO LEGAL|XINTEL|Leer menos)",
+            # FIX: también cortar en "Preguntas para la inmobiliaria" y "Conocé más"
+            r"Descripci[oó]n\s*(?:completa\s*)?(.+?)(?:Preguntas para la inmobiliaria|Conocé más sobre|Leer menos|Características|Servicios|Ubicación|Mapa|Propiedades similares)",
+            r"(Venta de .*?(?:Capital Federal|Buenos Aires)\..+?)(?:LEPORE|AVISO LEGAL|XINTEL|Leer menos|Preguntas para la inmobiliaria)",
+            r"(Departamento .*?(?:Capital Federal|Buenos Aires)\..+?)(?:LEPORE|AVISO LEGAL|XINTEL|Leer menos|Preguntas para la inmobiliaria)",
         ]
         for pattern in patterns:
             match = re.search(pattern, text, re.I | re.S)
             if match:
                 candidate = re.sub(r"\s+\n", "\n", match.group(1)).strip()
                 candidate = ScraperService._clean_description(candidate)
-                if len(candidate) >= 120:
+                if len(candidate) >= 80:
                     return candidate
         return ""
 
@@ -440,6 +450,8 @@ class ScraperService:
         text = re.sub(r"\bLEPORE PROPIEDADES\b.*$", "", text, flags=re.I | re.S)
         text = re.sub(r"\bAVISO LEGAL:.*$", "", text, flags=re.I | re.S)
         text = re.sub(r"\bXINTEL.*$", "", text, flags=re.I | re.S)
+        # FIX: limpiar el footer de "Esta unidad es apta..." y similares del aviso legal
+        text = re.sub(r"\bEsta unidad es apta para personas.*$", "", text, flags=re.I | re.S)
         text = re.sub(r"\n{3,}", "\n\n", text)
         text = re.sub(r"[ \t]{2,}", " ", text)
         return text.strip(" .\n")
@@ -557,7 +569,8 @@ class ScraperService:
             return True
         if re.search(r"\b(Favorito|Compartir|Notas personales|Ocultar aviso|Ver menos|Contactar|Denunciar)\b", line, re.I):
             return True
-        if re.search(r"!\[[^\]]*\]\(https?://", line):
+        # FIX: filtrar links markdown [texto](url) — sidebars de búsqueda de ZonaProp
+        if re.search(r"\[[^\]]+\]\(https?://", line):
             return True
         if re.fullmatch(r"[#>*\-\s\d|.:/]+", line):
             return True
@@ -567,6 +580,8 @@ class ScraperService:
 
     @staticmethod
     def _extract_detail_candidates(markdown: str) -> dict[str, str | None]:
+        # FIX: antes de aplicar regex, limpiar links markdown para que no interfieran
+        clean_md = re.sub(r"\[([^\]]+)\]\(https?://[^)]+\)", r"\1", markdown)
         patterns = {
             "ambientes": [
                 r"(\d+)\s+ambientes?",
@@ -581,11 +596,11 @@ class ScraperService:
                 r"Baños?\s*:?\s*(\d+)",
             ],
             "metros_totales": [
-                r"(\d+(?:[.,]\d+)?)\s*m[²2]\s*totales",
+                r"(\d+(?:[.,]\d+)?)\s*m[²2](?:\s*tot\.?|\s*totales?)",
                 r"Sup(?:erficie)?\s*total\s*:?\s*(\d+(?:[.,]\d+)?)\s*m[²2]",
             ],
             "metros_cubiertos": [
-                r"(\d+(?:[.,]\d+)?)\s*m[²2]\s*cubiertos",
+                r"(\d+(?:[.,]\d+)?)\s*m[²2](?:\s*cub\.?|\s*cubiertos?)",
                 r"Sup(?:erficie)?\s*cubierta\s*:?\s*(\d+(?:[.,]\d+)?)\s*m[²2]",
             ],
             "cocheras": [
@@ -603,7 +618,7 @@ class ScraperService:
                 r"\b(Frente|Contrafrente|Interno|Lateral)\b",
             ],
             "orientacion": [
-                r"\b(Norte|Sur|Este|Oeste|NE|NO|SE|SO|N|S|E|O)\b",
+                r"\b(Norte|Sur|Este|Oeste|NE|NO|SE|SO)\b",
             ],
             "estado": [
                 r"\b(A estrenar|Excelente estado|Muy buen estado|Buen estado|En construcción)\b",
@@ -612,7 +627,7 @@ class ScraperService:
         out: dict[str, str | None] = {key: None for key in patterns}
         for key, regexes in patterns.items():
             for regex in regexes:
-                match = re.search(regex, markdown, re.I)
+                match = re.search(regex, clean_md, re.I)
                 if match:
                     out[key] = re.sub(r"\s+", " ", match.group(1)).strip(" -|")
                     break
@@ -620,8 +635,10 @@ class ScraperService:
 
     @staticmethod
     def _infer_feature_lines(markdown: str) -> list[str]:
+        # FIX: limpiar links markdown antes de inferir features
+        clean_md = re.sub(r"\[([^\]]+)\]\(https?://[^)]+\)", r"\1", markdown)
         candidates: list[str] = []
-        for line in [l.strip(" -*#\t") for l in markdown.splitlines()]:
+        for line in [l.strip(" -*#\t") for l in clean_md.splitlines()]:
             if len(line) < 3 or len(line) > 90:
                 continue
             if ScraperService._is_noise_line(line):
@@ -676,11 +693,11 @@ class ScraperService:
             if not line:
                 continue
             if not values["metros_totales"]:
-                m = re.search(r"(\d+)\s*m²\s*tot\.?", line, re.I)
+                m = re.search(r"(\d+)\s*m[²2]\s*tot\.?", line, re.I)
                 if m:
                     values["metros_totales"] = m.group(1)
             if not values["metros_cubiertos"]:
-                m = re.search(r"(\d+)\s*m²\s*cub\.?", line, re.I)
+                m = re.search(r"(\d+)\s*m[²2]\s*cub\.?", line, re.I)
                 if m:
                     values["metros_cubiertos"] = m.group(1)
             if not values["ambientes"]:
@@ -704,7 +721,7 @@ class ScraperService:
                 if m:
                     values["disposicion"] = m.group(1)
             if not values["orientacion"]:
-                m = re.search(r"\b(Norte|Sur|Este|Oeste|NE|NO|SE|SO|N|S|E|O)\b", line, re.I)
+                m = re.search(r"\b(Norte|Sur|Este|Oeste|NE|NO|SE|SO)\b", line, re.I)
                 if m:
                     values["orientacion"] = m.group(1)
         return values
@@ -759,7 +776,7 @@ class ScraperService:
                 continue
             if re.fullmatch(r"\d+\s+bañ[oa]s?", normalized):
                 continue
-            if re.fullmatch(r"\d+\s*m²\s*(tot(?:ales?)?|cub(?:iertos?)?)?", normalized):
+            if re.fullmatch(r"\d+\s*m[²2]\s*(tot(?:ales?)?|cub(?:iertos?)?)?", normalized):
                 continue
 
             normalized = re.sub(r"^ambientes?\s+", "", normalized).strip()
