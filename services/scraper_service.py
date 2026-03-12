@@ -34,11 +34,9 @@ class ScraperService:
         log("Procesando contenido estructurado desde Firecrawl...")
         extracted = self._extract_structured_data(markdown, html, raw_html, log)
 
-        # Separamos image_urls del resto para que PropertyService las descargue
         image_urls_llm = extracted.pop("image_urls", []) or []
         caracteristicas_raw = extracted.pop("caracteristicas", [])
 
-        # Completamos y filtramos imágenes a partir del Markdown bruto + la lista "images" de Firecrawl.
         image_urls_from_markdown = self._extract_image_urls_from_markdown(markdown)
         image_urls_from_firecrawl = self._filter_image_urls(firecrawl_images)
         image_urls_from_html = self._extract_image_urls_from_html(raw_html or html)
@@ -49,9 +47,9 @@ class ScraperService:
         image_urls = merged_image_urls[:MAX_IMAGES]
 
         detalles = {
-            "ambientes":       extracted.pop("ambientes", None),
-            "banos":           extracted.pop("banos", None),
-            "metros_totales":  extracted.pop("metros_totales", None),
+            "ambientes":        extracted.pop("ambientes", None),
+            "banos":            extracted.pop("banos", None),
+            "metros_totales":   extracted.pop("metros_totales", None),
             "metros_cubiertos": extracted.pop("metros_cubiertos", None),
         }
         info_adicional = {
@@ -61,15 +59,15 @@ class ScraperService:
         }
 
         return {
-            "titulo":        extracted.get("titulo") or "Propiedad en Venta",
-            "precio":        extracted.get("precio") or "Consultar precio",
-            "ubicacion":     extracted.get("ubicacion") or "Ver en el portal",
-            "descripcion":   extracted.get("descripcion") or "Sin descripción",
-            "detalles":      detalles,
+            "titulo":          extracted.get("titulo") or "Propiedad en Venta",
+            "precio":          extracted.get("precio") or "Consultar precio",
+            "ubicacion":       extracted.get("ubicacion") or "Ver en el portal",
+            "descripcion":     extracted.get("descripcion") or "Sin descripción",
+            "detalles":        detalles,
             "caracteristicas": [c for c in caracteristicas_raw if c],
-            "info_adicional": info_adicional,
-            "image_urls":    image_urls,
-            "source_portal": portal,
+            "info_adicional":  info_adicional,
+            "image_urls":      image_urls,
+            "source_portal":   portal,
         }
 
     # ──────────────────────────────────────────────
@@ -101,7 +99,6 @@ class ScraperService:
         except Exception as e:
             raise RuntimeError(f"Error llamando a Firecrawl: {e}") from e
 
-        # El SDK puede devolver un dict o un objeto Document.
         if isinstance(result, dict):
             markdown = (result.get("markdown") or "").strip()
             images = result.get("images") or []
@@ -115,7 +112,6 @@ class ScraperService:
         if not markdown:
             raise RuntimeError("Firecrawl devolvió Markdown vacío")
 
-        # Normalizamos images a lista de strings
         image_urls: list[str] = []
         if isinstance(images, list):
             for item in images:
@@ -159,20 +155,28 @@ class ScraperService:
         detalles = self._extract_detail_candidates(source_text)
         detalles_html = self._extract_detail_candidates_from_html(html)
         detalles.update({k: v for k, v in detalles_html.items() if v})
+
+        # FIX: ubicación — intentar primero desde HTML (dirección completa)
+        ubicacion = (
+            self._extract_location_from_html(html)
+            or self._extract_location(source_text)
+            or "Ver en el portal"
+        )
+
         return {
-            "titulo": self._extract_title(source_text) or "Propiedad en Venta",
-            "precio": price_match.group(0) if price_match else "Consultar precio",
-            "ubicacion": self._extract_location(source_text) or "Ver en el portal",
-            "descripcion": descripcion,
-            "ambientes": detalles.get("ambientes"),
-            "banos": detalles.get("banos"),
-            "metros_totales": detalles.get("metros_totales"),
+            "titulo":          self._extract_title(source_text) or "Propiedad en Venta",
+            "precio":          price_match.group(0) if price_match else "Consultar precio",
+            "ubicacion":       ubicacion,
+            "descripcion":     descripcion,
+            "ambientes":       detalles.get("ambientes"),
+            "banos":           detalles.get("banos"),
+            "metros_totales":  detalles.get("metros_totales"),
             "metros_cubiertos": detalles.get("metros_cubiertos"),
-            "cocheras": detalles.get("cocheras"),
-            "antiguedad": detalles.get("antiguedad"),
-            "expensas": detalles.get("expensas"),
+            "cocheras":        detalles.get("cocheras"),
+            "antiguedad":      detalles.get("antiguedad"),
+            "expensas":        detalles.get("expensas"),
             "caracteristicas": self._merge_feature_lists(caracteristicas, self._details_to_features(detalles)),
-            "image_urls": self._extract_image_urls_from_html(html) + self._extract_image_urls_from_markdown(markdown),
+            "image_urls":      self._extract_image_urls_from_html(html) + self._extract_image_urls_from_markdown(markdown),
         }
 
     @staticmethod
@@ -190,16 +194,8 @@ class ScraperService:
     @staticmethod
     def _filter_image_urls(urls: list[str]) -> list[str]:
         blacklist_substrings = (
-            "logo",
-            "favicon",
-            "icon",
-            "sprite",
-            "placeholder",
-            "watermark",
-            "notesicon",
-            "fav-",
-            "fav_icon",
-            ".svg",
+            "logo", "favicon", "icon", "sprite", "placeholder",
+            "watermark", "notesicon", "fav-", "fav_icon", ".svg",
         )
         filtered: list[str] = []
         seen_keys: set[str] = set()
@@ -241,7 +237,6 @@ class ScraperService:
                 return False
             if re.search(r"\b(Favorito|Compartir|Notas personales|Ocultar aviso|Ver menos)\b", line, re.I):
                 return True
-            # FIX: líneas que son links markdown [texto](url) — típico de sidebars de ZonaProp
             if re.search(r"^\[.+\]\(https?://", line):
                 return True
             if re.fullmatch(r"!?(\[[^\]]*\])?!?\[[^\]]*\]\([^)]+\)\s*", line):
@@ -261,7 +256,6 @@ class ScraperService:
         collected: list[str] = []
         if start_idx != -1:
             for l in lines[start_idx:]:
-                # FIX: cortar también en el formulario de preguntas de ZonaProp
                 if re.search(r"Preguntas para la inmobiliaria|Seleccioná una o más preguntas", l, re.I):
                     break
                 if not l:
@@ -272,7 +266,6 @@ class ScraperService:
                     break
                 if _is_noise(l):
                     continue
-                # FIX: saltar la palabra "completa" suelta que ZonaProp pone como subtítulo
                 if l.strip().lower() == "completa":
                     continue
                 collected.append(l)
@@ -309,10 +302,7 @@ class ScraperService:
             if re.search(r"\b(Favorito|Compartir|Notas personales|Ocultar aviso)\b", l, re.I):
                 continue
             m = re.match(r"^[-*]\s+(.+)$", l)
-            if m:
-                val = m.group(1).strip()
-            else:
-                val = l.strip()
+            val = m.group(1).strip() if m else l.strip()
             if not val or len(val) > 120:
                 continue
             if val not in feats:
@@ -421,13 +411,43 @@ class ScraperService:
         urls = re.findall(r"""https?://[^\s"'<>]+""", html, re.I)
         return ScraperService._filter_image_urls(urls)
 
+    # FIX: extrae la dirección completa desde el HTML
+    @staticmethod
+    def _extract_location_from_html(html: str) -> str:
+        if not html:
+            return ""
+        # ZonaProp: <h2 class="title-location">Av. Independencia 1977...</h2>
+        m = re.search(r'<h2[^>]*class="[^"]*title-location[^"]*"[^>]*>\s*([^<]{10,200})\s*</h2>', html, re.I)
+        if m:
+            return re.sub(r"\s+", " ", unescape(m.group(1))).strip()
+        # ZonaProp: dirección en un span/div con class que contiene "location" o "address"
+        m = re.search(r'<(?:span|div|p)[^>]*class="[^"]*(?:location|address|ubicacion)[^"]*"[^>]*>\s*([^<]{10,200})\s*</(?:span|div|p)>', html, re.I)
+        if m:
+            return re.sub(r"\s+", " ", unescape(m.group(1))).strip()
+        # Argenprop / MercadoLibre: data-testid o class con "address"
+        m = re.search(r'data-testid="[^"]*address[^"]*"[^>]*>\s*([^<]{10,200})\s*<', html, re.I)
+        if m:
+            return re.sub(r"\s+", " ", unescape(m.group(1))).strip()
+        # Fallback: buscar patrón de dirección argentina en el texto del HTML
+        text = ScraperService._html_to_text(html)
+        m = re.search(
+            r'((?:Av(?:enida)?|Calle|Bv|Blvd|Ruta|Pasaje|Pje)\.?\s+[A-ZÁÉÍÓÚÑ][^\n]{5,100}'
+            r'(?:,\s*(?:entre|esq|y)\s+[^\n]{5,60})?'
+            r'(?:,\s*[A-ZÁÉÍÓÚÑ][a-záéíóúñ ]{3,40})*)',
+            text, re.I
+        )
+        if m:
+            value = re.sub(r"\s+", " ", m.group(1)).strip(" ,")
+            if len(value) >= 15:
+                return value
+        return ""
+
     @staticmethod
     def _extract_description_from_html(html: str) -> str:
         text = ScraperService._html_to_text(html)
         if not text:
             return ""
         patterns = [
-            # FIX: también cortar en "Preguntas para la inmobiliaria" y "Conocé más"
             r"Descripci[oó]n\s*(?:completa\s*)?(.+?)(?:Preguntas para la inmobiliaria|Conocé más sobre|Leer menos|Características|Servicios|Ubicación|Mapa|Propiedades similares)",
             r"(Venta de .*?(?:Capital Federal|Buenos Aires)\..+?)(?:LEPORE|AVISO LEGAL|XINTEL|Leer menos|Preguntas para la inmobiliaria)",
             r"(Departamento .*?(?:Capital Federal|Buenos Aires)\..+?)(?:LEPORE|AVISO LEGAL|XINTEL|Leer menos|Preguntas para la inmobiliaria)",
@@ -450,7 +470,6 @@ class ScraperService:
         text = re.sub(r"\bLEPORE PROPIEDADES\b.*$", "", text, flags=re.I | re.S)
         text = re.sub(r"\bAVISO LEGAL:.*$", "", text, flags=re.I | re.S)
         text = re.sub(r"\bXINTEL.*$", "", text, flags=re.I | re.S)
-        # FIX: limpiar el footer de "Esta unidad es apta..." y similares del aviso legal
         text = re.sub(r"\bEsta unidad es apta para personas.*$", "", text, flags=re.I | re.S)
         text = re.sub(r"\n{3,}", "\n\n", text)
         text = re.sub(r"[ \t]{2,}", " ", text)
@@ -458,9 +477,29 @@ class ScraperService:
 
     @staticmethod
     def _extract_features_from_html(html: str) -> list[str]:
-        text = ScraperService._html_to_text(html)
-        if not text:
+        if not html:
             return []
+
+        # FIX: extraer específicamente los <li class="icon-feature"> de ZonaProp
+        # Ejemplo: <li class="icon-feature"><span>104 m² tot.</span></li>
+        icon_features: list[str] = []
+        li_matches = re.findall(
+            r'<li[^>]*class="[^"]*icon-feature[^"]*"[^>]*>(.*?)</li>',
+            html, re.I | re.S
+        )
+        for li_html in li_matches:
+            # quitar tags internos y dejar solo el texto
+            text = re.sub(r"<[^>]+>", " ", li_html)
+            text = unescape(text)
+            text = re.sub(r"\s+", " ", text).strip()
+            if text and len(text) >= 2 and len(text) <= 80:
+                icon_features.append(text)
+
+        if icon_features:
+            return icon_features
+
+        # Fallback: extracción por palabras clave del texto plano
+        text = ScraperService._html_to_text(html)
         candidates: list[str] = []
         for line in [l.strip(" -") for l in text.splitlines()]:
             if len(line) < 3 or len(line) > 100:
@@ -499,6 +538,7 @@ class ScraperService:
 
     @staticmethod
     def _extract_location(markdown: str) -> str:
+        # limpiar links markdown antes de buscar
         markdown = re.sub(r"\[([^\]]+)\]\((https?://[^)]+)\)", r"\1", markdown)
         patterns = [
             r"(?:Dirección|Ubicación)\s*:?\s*(.+)",
@@ -547,15 +587,9 @@ class ScraperService:
     def _text_score(text: str) -> int:
         score = len(text)
         bonuses = [
-            ("ambiente", 40),
-            ("propiedad", 35),
-            ("cocina", 25),
-            ("living", 25),
-            ("dormitorio", 25),
-            ("baño", 25),
-            ("balc", 20),
-            ("ubic", 15),
-            ("luminos", 15),
+            ("ambiente", 40), ("propiedad", 35), ("cocina", 25),
+            ("living", 25), ("dormitorio", 25), ("baño", 25),
+            ("balc", 20), ("ubic", 15), ("luminos", 15),
         ]
         lower = text.lower()
         for token, bonus in bonuses:
@@ -569,7 +603,7 @@ class ScraperService:
             return True
         if re.search(r"\b(Favorito|Compartir|Notas personales|Ocultar aviso|Ver menos|Contactar|Denunciar)\b", line, re.I):
             return True
-        # FIX: filtrar links markdown [texto](url) — sidebars de búsqueda de ZonaProp
+        # FIX: filtrar links markdown [texto](url)
         if re.search(r"\[[^\]]+\]\(https?://", line):
             return True
         if re.fullmatch(r"[#>*\-\s\d|.:/]+", line):
@@ -580,7 +614,7 @@ class ScraperService:
 
     @staticmethod
     def _extract_detail_candidates(markdown: str) -> dict[str, str | None]:
-        # FIX: antes de aplicar regex, limpiar links markdown para que no interfieran
+        # limpiar links markdown antes de aplicar regex
         clean_md = re.sub(r"\[([^\]]+)\]\(https?://[^)]+\)", r"\1", markdown)
         patterns = {
             "ambientes": [
@@ -635,7 +669,6 @@ class ScraperService:
 
     @staticmethod
     def _infer_feature_lines(markdown: str) -> list[str]:
-        # FIX: limpiar links markdown antes de inferir features
         clean_md = re.sub(r"\[([^\]]+)\]\(https?://[^)]+\)", r"\1", markdown)
         candidates: list[str] = []
         for line in [l.strip(" -*#\t") for l in clean_md.splitlines()]:
@@ -677,53 +710,82 @@ class ScraperService:
 
     @staticmethod
     def _extract_detail_candidates_from_html(html: str) -> dict[str, str | None]:
+        # FIX: primero intentar parsear <li class="icon-feature"> de ZonaProp
+        # que contienen texto como "104 m² tot.", "73 m² cub.", "4 amb.", "2 baños", etc.
+        values: dict[str, str | None] = {
+            "metros_totales": None, "metros_cubiertos": None,
+            "ambientes": None, "banos": None, "dormitorios": None,
+            "estado": None, "disposicion": None, "orientacion": None,
+        }
+
+        if html:
+            li_matches = re.findall(
+                r'<li[^>]*class="[^"]*icon-feature[^"]*"[^>]*>(.*?)</li>',
+                html, re.I | re.S
+            )
+            for li_html in li_matches:
+                t = re.sub(r"\s+", " ", unescape(re.sub(r"<[^>]+>", " ", li_html))).strip()
+                if not t:
+                    continue
+                if not values["metros_totales"]:
+                    m = re.search(r"(\d+(?:[.,]\d+)?)\s*m[²2]\s*tot", t, re.I)
+                    if m: values["metros_totales"] = m.group(1)
+                if not values["metros_cubiertos"]:
+                    m = re.search(r"(\d+(?:[.,]\d+)?)\s*m[²2]\s*cub", t, re.I)
+                    if m: values["metros_cubiertos"] = m.group(1)
+                if not values["ambientes"]:
+                    m = re.search(r"(\d+)\s*amb", t, re.I)
+                    if m: values["ambientes"] = m.group(1)
+                if not values["banos"]:
+                    m = re.search(r"(\d+)\s*bañ[oa]s?", t, re.I)
+                    if m: values["banos"] = m.group(1)
+                if not values["dormitorios"]:
+                    m = re.search(r"(\d+)\s*dorm", t, re.I)
+                    if m: values["dormitorios"] = m.group(1)
+                if not values["estado"]:
+                    m = re.search(r"\b(A estrenar|Excelente estado|Muy buen estado|Buen estado|En construcción)\b", t, re.I)
+                    if m: values["estado"] = m.group(1)
+                if not values["disposicion"]:
+                    m = re.search(r"\b(Frente|Contrafrente|Interno|Lateral)\b", t, re.I)
+                    if m: values["disposicion"] = m.group(1)
+                if not values["orientacion"]:
+                    m = re.search(r"\b(Norte|Sur|Este|Oeste|NE|NO|SE|SO|^[NSEO]$)\b", t, re.I)
+                    if m: values["orientacion"] = m.group(1)
+
+            # Si encontramos algo con icon-feature, devolver ya
+            if any(v for v in values.values()):
+                return values
+
+        # Fallback: texto plano del HTML
         text = ScraperService._html_to_text(html)
         lines = [re.sub(r"\s+", " ", line).strip() for line in text.splitlines()]
-        values = {
-            "metros_totales": None,
-            "metros_cubiertos": None,
-            "ambientes": None,
-            "banos": None,
-            "dormitorios": None,
-            "estado": None,
-            "disposicion": None,
-            "orientacion": None,
-        }
         for line in lines:
             if not line:
                 continue
             if not values["metros_totales"]:
                 m = re.search(r"(\d+)\s*m[²2]\s*tot\.?", line, re.I)
-                if m:
-                    values["metros_totales"] = m.group(1)
+                if m: values["metros_totales"] = m.group(1)
             if not values["metros_cubiertos"]:
                 m = re.search(r"(\d+)\s*m[²2]\s*cub\.?", line, re.I)
-                if m:
-                    values["metros_cubiertos"] = m.group(1)
+                if m: values["metros_cubiertos"] = m.group(1)
             if not values["ambientes"]:
                 m = re.search(r"(\d+)\s*amb\.?", line, re.I)
-                if m:
-                    values["ambientes"] = m.group(1)
+                if m: values["ambientes"] = m.group(1)
             if not values["banos"]:
                 m = re.search(r"(\d+)\s*bañ[oa]s?", line, re.I)
-                if m:
-                    values["banos"] = m.group(1)
+                if m: values["banos"] = m.group(1)
             if not values["dormitorios"]:
                 m = re.search(r"(\d+)\s*dorm\.?", line, re.I)
-                if m:
-                    values["dormitorios"] = m.group(1)
+                if m: values["dormitorios"] = m.group(1)
             if not values["estado"]:
                 m = re.search(r"\b(A estrenar|Excelente estado|Muy buen estado|Buen estado|En construcción)\b", line, re.I)
-                if m:
-                    values["estado"] = m.group(1)
+                if m: values["estado"] = m.group(1)
             if not values["disposicion"]:
                 m = re.search(r"\b(Frente|Contrafrente|Interno|Lateral)\b", line, re.I)
-                if m:
-                    values["disposicion"] = m.group(1)
+                if m: values["disposicion"] = m.group(1)
             if not values["orientacion"]:
                 m = re.search(r"\b(Norte|Sur|Este|Oeste|NE|NO|SE|SO)\b", line, re.I)
-                if m:
-                    values["orientacion"] = m.group(1)
+                if m: values["orientacion"] = m.group(1)
         return values
 
     @staticmethod
@@ -755,10 +817,8 @@ class ScraperService:
             value = re.sub(r"\s+", " ", (feature or "")).strip(" -|:.,")
             if not value:
                 continue
-
             normalized = value.lower()
-
-            if len(value) < 4:
+            if len(value) < 2:
                 continue
             if normalized in {"ambientes", "ambiente", "departamentos", "propiedades"}:
                 continue
@@ -778,7 +838,6 @@ class ScraperService:
                 continue
             if re.fullmatch(r"\d+\s*m[²2]\s*(tot(?:ales?)?|cub(?:iertos?)?)?", normalized):
                 continue
-
             normalized = re.sub(r"^ambientes?\s+", "", normalized).strip()
             if normalized in seen_normalized:
                 continue
