@@ -1,6 +1,7 @@
 import os
 import re
 import shutil
+import urllib.parse
 import urllib.request
 from email.message import Message
 from typing import Any
@@ -69,26 +70,19 @@ class PropertyService:
 
         saved: list[str] = []
         failed = 0
+        origin = self._origin_from_url(referer_url)
         # Intentamos descargar todas las imágenes útiles detectadas, con un tope amplio.
         for index, image_url in enumerate(image_urls[:MAX_IMAGES], start=1):
             try:
-                req = urllib.request.Request(
-                    image_url,
-                    headers={
-                        "User-Agent": "Mozilla/5.0",
-                        "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
-                        "Accept-Language": "es-AR,es;q=0.9,en;q=0.8",
-                        "Cache-Control": "no-cache",
-                        "Pragma": "no-cache",
-                        "Origin": referer_url,
-                        "Referer": referer_url,
-                    },
-                )
-                # Reintento simple: a veces el CDN corta o rate-limita.
                 last_err: Exception | None = None
                 data = b""
                 ext = self._guess_ext(image_url)
-                for _ in range(2):
+                header_sets = [
+                    self._image_request_headers(referer_url=referer_url, origin=origin, include_referer=True),
+                    self._image_request_headers(referer_url=referer_url, origin=origin, include_referer=False),
+                ]
+                for headers in header_sets:
+                    req = urllib.request.Request(image_url, headers=headers)
                     try:
                         with urllib.request.urlopen(req, timeout=30) as response:
                             data = response.read()
@@ -113,8 +107,13 @@ class PropertyService:
             if failed:
                 log(f"Imagenes no descargadas: {failed}")
         else:
-            log("No se pudieron descargar imagenes, se mostraran placeholders")
-            saved = [self._placeholder_svg_url()] * 5
+            remote_fallbacks = [url for url in image_urls[:MAX_IMAGES] if isinstance(url, str) and url.strip()]
+            if remote_fallbacks:
+                log("No se pudieron descargar imagenes localmente, se usaran URLs remotas")
+                saved = remote_fallbacks
+            else:
+                log("No se pudieron descargar imagenes, se mostraran placeholders")
+                saved = [self._placeholder_svg_url()] * 5
         return saved
 
     def delete_property(self, property_id: int, owner_username: str | None = None) -> bool:
@@ -155,6 +154,28 @@ class PropertyService:
         if re.search(r"\.jpg($|\?)", low):
             return ".jpg"
         return ".jpg"
+
+    @staticmethod
+    def _origin_from_url(url: str) -> str:
+        parsed = urllib.parse.urlsplit(url or "")
+        if not parsed.scheme or not parsed.netloc:
+            return ""
+        return f"{parsed.scheme}://{parsed.netloc}"
+
+    @staticmethod
+    def _image_request_headers(*, referer_url: str, origin: str, include_referer: bool) -> dict[str, str]:
+        headers = {
+            "User-Agent": "Mozilla/5.0",
+            "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+            "Accept-Language": "es-AR,es;q=0.9,en;q=0.8",
+            "Cache-Control": "no-cache",
+            "Pragma": "no-cache",
+        }
+        if include_referer and referer_url:
+            headers["Referer"] = referer_url
+        if include_referer and origin:
+            headers["Origin"] = origin
+        return headers
 
     @staticmethod
     def _placeholder_svg_url() -> str:
