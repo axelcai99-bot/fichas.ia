@@ -45,7 +45,7 @@ body{font-family:'Inter',sans-serif;background:#f5f5f5;color:#404041;-webkit-fon
   </div>
 
   <div class="strip" style="margin-bottom:24px">
-    {% for image in images[:20] %}
+    {% for image in images %}
     <img src="{{ image }}" onclick="showPhoto({{ loop.index0 }})" onerror="this.style.display='none'" style="width:120px;height:80px;object-fit:cover;border-radius:8px;cursor:pointer;flex-shrink:0" alt="foto {{ loop.index }}">
     {% endfor %}
   </div>
