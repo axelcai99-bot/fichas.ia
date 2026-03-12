@@ -307,7 +307,9 @@ class ScraperService:
         feats: list[str] = []
         if start_idx == -1:
             inferred = ScraperService._infer_feature_lines(text)
-            return ScraperService._merge_feature_lists(html_features, inferred)
+            return ScraperService._filter_feature_noise(
+                ScraperService._merge_feature_lists(html_features, inferred)
+            )
 
         for l in lines[start_idx:]:
             if not l:
@@ -330,7 +332,9 @@ class ScraperService:
                 break
 
         inferred = ScraperService._infer_feature_lines(text)
-        return ScraperService._merge_feature_lists(html_features, feats, inferred)
+        return ScraperService._filter_feature_noise(
+            ScraperService._merge_feature_lists(html_features, feats, inferred)
+        )
 
     # ──────────────────────────────────────────────
     # Helpers
@@ -744,3 +748,44 @@ class ScraperService:
             if value:
                 features.append(value)
         return features
+
+    @staticmethod
+    def _filter_feature_noise(features: list[str]) -> list[str]:
+        cleaned_features: list[str] = []
+        seen_normalized: set[str] = set()
+
+        for feature in features:
+            value = re.sub(r"\s+", " ", (feature or "")).strip(" -|:.,")
+            if not value:
+                continue
+
+            normalized = value.lower()
+
+            if len(value) < 4:
+                continue
+            if normalized in {"ambientes", "ambiente", "departamentos", "propiedades"}:
+                continue
+            if re.search(r"\bdepartamentos?\s+en\s+venta\b", normalized):
+                continue
+            if re.search(r"\b(?:san\s+crist[oó]bal|capital\s+federal|ver\s+datos)\b", normalized):
+                continue
+            if re.search(r"\b(publicado|actualizado|favorito|compartir|notas personales)\b", normalized):
+                continue
+            if re.fullmatch(r"\d+\s+ambientes?", normalized):
+                continue
+            if re.fullmatch(r"ambientes?\s+\d+\s+ambientes?", normalized):
+                continue
+            if re.fullmatch(r"\d+\s+dorm(?:itorios?)?", normalized):
+                continue
+            if re.fullmatch(r"\d+\s+bañ[oa]s?", normalized):
+                continue
+            if re.fullmatch(r"\d+\s*m²\s*(tot(?:ales?)?|cub(?:iertos?)?)?", normalized):
+                continue
+
+            normalized = re.sub(r"^ambientes?\s+", "", normalized).strip()
+            if normalized in seen_normalized:
+                continue
+            seen_normalized.add(normalized)
+            cleaned_features.append(value)
+
+        return cleaned_features[:20]
