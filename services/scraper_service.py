@@ -101,10 +101,11 @@ class ScraperService:
 
         try:
             # Pedimos específicamente Markdown limpio.
-            result = app.scrape(url, params={"formats": ["markdown"]})
+            result = app.scrape(url, formats=["markdown"])
         except Exception as e:
             raise RuntimeError(f"Error llamando a Firecrawl: {e}") from e
 
+        # En el SDK, cuando se pide "markdown", suele venir en result["markdown"].
         markdown = (result.get("markdown") or "").strip()
         if not markdown:
             raise RuntimeError("Firecrawl devolvió Markdown vacío")
