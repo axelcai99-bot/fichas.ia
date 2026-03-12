@@ -182,7 +182,9 @@ class ScraperService:
         genai.configure(api_key=api_key)
 
         try:
-            model = genai.GenerativeModel("gemini-1.5-flash")
+            # Usamos el alias recomendado de la API de Gemini.
+            # "-latest" siempre apunta a la versión estable actual del modelo.
+            model = genai.GenerativeModel("gemini-1.5-flash-latest")
             response = model.generate_content(EXTRACTION_PROMPT + truncated)
             raw_text = (response.text or "").strip()
         except Exception as e:
