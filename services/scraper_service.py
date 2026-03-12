@@ -1,6 +1,7 @@
 import os
 import re
 import json
+import unicodedata
 from html import unescape
 import urllib.error
 import urllib.parse
@@ -35,6 +36,16 @@ class ScraperService:
 
         log("Procesando contenido estructurado desde Firecrawl...")
         extracted = self._extract_structured_data(markdown, html, raw_html, source_url, log)
+        validation_error = self._validate_extracted_listing(
+            portal=portal,
+            source_url=source_url,
+            markdown=markdown,
+            html=raw_html or html,
+            extracted=extracted,
+            log=log,
+        )
+        if validation_error:
+            raise RuntimeError(validation_error)
 
         image_urls_llm = extracted.pop("image_urls", []) or []
         caracteristicas_raw = extracted.pop("caracteristicas", [])
@@ -156,9 +167,10 @@ class ScraperService:
         focused_html = self._focus_listing_content(html)
         source_text = self._merge_sources(focused_markdown, focused_html)
         listing_payload = self._extract_listing_payload_from_html(html, source_url)
+        trusted_html = focused_html if listing_payload.get("_listing_id_found") else ""
         price_match = re.search(r"(?:USD|U\$S|AR\$|\$)\s*[\d.,]+", focused_markdown or markdown, re.I)
-        titulo_html = listing_payload.get("titulo") or self._extract_title_from_html(html)
-        precio_html = listing_payload.get("precio") or self._extract_price_from_html(html)
+        titulo_html = listing_payload.get("titulo") or self._extract_title_from_html(trusted_html)
+        precio_html = listing_payload.get("precio") or self._extract_price_from_html(trusted_html)
         descripcion = listing_payload.get("descripcion") or self._extract_description(source_text, focused_html) or self._best_text_block(source_text)
         caracteristicas = self._extract_features(source_text, focused_html)
         detalles = self._extract_detail_candidates(source_text)
@@ -169,7 +181,7 @@ class ScraperService:
         # FIX: ubicación — intentar primero desde HTML (dirección completa)
         ubicacion = (
             listing_payload.get("ubicacion")
-            or self._extract_location_from_html(focused_html)
+            or self._extract_location_from_html(trusted_html)
             or self._extract_location(source_text)
             or "Ver en el portal"
         )
@@ -192,6 +204,7 @@ class ScraperService:
             "orientacion":     detalles.get("orientacion"),
             "caracteristicas": self._merge_feature_lists(caracteristicas, self._details_to_features(detalles)),
             "image_urls":      (listing_payload.get("image_urls") or []) + self._extract_contextual_image_urls_from_html(focused_html),
+            "_listing_id_found": bool(listing_payload.get("_listing_id_found")),
         }
 
     def _select_image_urls(
@@ -376,11 +389,11 @@ class ScraperService:
             except Exception:
                 pass
         if not html or not listing_id:
-            return html
+            return ""
 
         positions = [match.start() for match in re.finditer(re.escape(listing_id), html)]
         if not positions:
-            return html
+            return ""
 
         best_window = html
         best_score = -1
@@ -504,7 +517,14 @@ class ScraperService:
     def _extract_listing_payload_from_html(html: str, source_url: str) -> dict[str, Any]:
         listing_id = ScraperService._extract_listing_id_from_url(source_url)
         context = ScraperService._extract_listing_context(html, listing_id)
-        payload: dict[str, Any] = {"detalles": {}, "image_urls": []}
+        payload: dict[str, Any] = {
+            "detalles": {},
+            "image_urls": [],
+            "_listing_id": listing_id,
+            "_listing_id_found": bool(context),
+        }
+        if not context:
+            return payload
 
         def extract_string(*keys: str, min_len: int = 1, max_len: int = 4000) -> str:
             for key in keys:
@@ -565,6 +585,98 @@ class ScraperService:
             ]
         )
         return payload
+
+    def _validate_extracted_listing(
+        self,
+        *,
+        portal: str,
+        source_url: str,
+        markdown: str,
+        html: str,
+        extracted: dict[str, Any],
+        log: Callable[[str], None],
+    ) -> str:
+        if portal != "zonaprop":
+            return ""
+
+        listing_id = self._extract_listing_id_from_url(source_url)
+        listing_id_found = bool(extracted.get("_listing_id_found"))
+        html_has_listing_id = bool(listing_id and listing_id in (html or ""))
+        markdown_has_listing_id = bool(listing_id and listing_id in (markdown or ""))
+
+        if listing_id and not html_has_listing_id and not markdown_has_listing_id:
+            log(f"Advertencia: Firecrawl no devolvió el ID {listing_id} dentro del HTML/Markdown del aviso.")
+
+        extracted_text = " ".join(
+            str(extracted.get(key) or "")
+            for key in ("titulo", "ubicacion", "descripcion", "precio")
+        )
+        url_tokens = self._source_url_tokens(source_url)
+        matched_tokens = [token for token in url_tokens if token in self._normalize_text(extracted_text)]
+
+        if matched_tokens:
+            log(f"Validación URL-contenido OK: {', '.join(matched_tokens[:4])}")
+            return ""
+
+        if listing_id and listing_id_found:
+            return ""
+
+        if url_tokens:
+            tokens_preview = ", ".join(url_tokens[:5])
+            reason = (
+                "Firecrawl devolvió contenido que no coincide con la URL del aviso. "
+                f"Tokens esperados según la URL: {tokens_preview}."
+            )
+        else:
+            reason = "Firecrawl devolvió contenido que no coincide con la URL del aviso."
+
+        if listing_id and not html_has_listing_id and not markdown_has_listing_id:
+            reason += f" El ID {listing_id} no apareció en el contenido devuelto por Zonaprop."
+
+        reason += " No se guardó la ficha para evitar mezclar otra propiedad."
+        return reason
+
+    @staticmethod
+    def _source_url_tokens(source_url: str) -> list[str]:
+        path = urllib.parse.urlsplit(source_url or "").path
+        slug = urllib.parse.unquote(os.path.basename(path or ""))
+        slug = re.sub(r"-(\d{6,})\.html$", "", slug, flags=re.I)
+        normalized = ScraperService._normalize_text(slug)
+        raw_tokens = [token for token in re.split(r"[^a-z0-9]+", normalized) if token]
+        anchor_tokens = {
+            "departamento", "departamentos", "depto", "casa", "ph",
+            "monoambiente", "ambiente", "ambientes", "local", "oficina",
+            "terreno", "lote",
+        }
+        for index, token in enumerate(raw_tokens):
+            if token in anchor_tokens:
+                raw_tokens = raw_tokens[index + 1:]
+                break
+        stopwords = {
+            "de", "del", "la", "las", "los", "al", "en", "y", "entre",
+            "propiedad", "propiedades", "clasificado", "departamento", "departamentos",
+            "depto", "casa", "ph", "monoambiente", "ambiente", "ambientes",
+            "venta", "av", "avenida", "calle", "capital", "federal", "argentina",
+            "zona", "zonaprop", "usd", "u", "s",
+        }
+        tokens: list[str] = []
+        for token in raw_tokens:
+            if token in stopwords:
+                continue
+            if token.isdigit():
+                continue
+            if len(token) < 4:
+                continue
+            if token not in tokens:
+                tokens.append(token)
+        return tokens
+
+    @staticmethod
+    def _normalize_text(value: str) -> str:
+        value = (value or "").strip().lower()
+        value = unicodedata.normalize("NFKD", value)
+        value = "".join(ch for ch in value if not unicodedata.combining(ch))
+        return re.sub(r"\s+", " ", value)
 
     @staticmethod
     def _first_h1(markdown: str) -> str:
