@@ -13,10 +13,10 @@ class PropertyRepository:
                 INSERT INTO properties(
                     owner_username, source_portal, titulo, precio, ubicacion, descripcion,
                     detalles_json, caracteristicas_json, info_adicional_json,
-                    image_paths_json, agent_name, agent_whatsapp, form_url,
+                    image_paths_json, source_image_urls_json, agent_name, agent_whatsapp, form_url,
                     source_url, created_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     payload.get("owner_username", "admin"),
@@ -29,6 +29,7 @@ class PropertyRepository:
                     json.dumps(payload.get("caracteristicas", []), ensure_ascii=False),
                     json.dumps(payload.get("info_adicional", {}), ensure_ascii=False),
                     json.dumps(payload.get("image_paths", []), ensure_ascii=False),
+                    json.dumps(payload.get("source_image_urls", []), ensure_ascii=False),
                     payload["agent_name"],
                     payload["agent_whatsapp"],
                     payload.get("form_url", ""),
@@ -53,7 +54,8 @@ class PropertyRepository:
                 """
                 SELECT id, titulo, precio, ubicacion, descripcion,
                        detalles_json, caracteristicas_json, info_adicional_json,
-                       image_paths_json, agent_name, agent_whatsapp, form_url, owner_username, source_portal,
+                       image_paths_json, source_image_urls_json,
+                       agent_name, agent_whatsapp, form_url, owner_username, source_portal,
                        source_url, created_at
                 FROM properties
                 WHERE id = ?
@@ -72,6 +74,7 @@ class PropertyRepository:
             "caracteristicas": json.loads(row["caracteristicas_json"] or "[]"),
             "info_adicional": json.loads(row["info_adicional_json"] or "{}"),
             "image_paths": json.loads(row["image_paths_json"] or "[]"),
+            "source_image_urls": json.loads(row["source_image_urls_json"] or "[]"),
             "agent_name": row["agent_name"],
             "agent_whatsapp": row["agent_whatsapp"],
             "form_url": row["form_url"] or "",

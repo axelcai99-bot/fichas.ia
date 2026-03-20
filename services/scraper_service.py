@@ -49,13 +49,16 @@ class ScraperService:
 
         image_urls_llm = extracted.pop("image_urls", []) or []
         caracteristicas_raw = extracted.pop("caracteristicas", [])
+        log(f"URLs de imágenes extraídas del HTML: {len(image_urls_llm)}, Firecrawl: {len(firecrawl_images)}")
         image_urls = self._select_image_urls(
             portal=portal,
             markdown=markdown,
             html=raw_html or html,
             llm_urls=image_urls_llm,
             firecrawl_urls=firecrawl_images,
+            log=log,
         )
+        log(f"URLs de imágenes seleccionadas para descarga: {len(image_urls)}")
 
         detalles = {
             "ambientes":        extracted.pop("ambientes", None),
@@ -207,6 +210,73 @@ class ScraperService:
             "_listing_id_found": bool(listing_payload.get("_listing_id_found")),
         }
 
+    @staticmethod
+    def _extract_image_urls_from_next_data(html: str) -> list[str]:
+        """Extrae URLs de imágenes del bloque __NEXT_DATA__ (Next.js) o cualquier
+        <script type="application/json"> que contenga arrays de fotos."""
+        if not html:
+            return []
+
+        # Buscar __NEXT_DATA__ primero, luego cualquier JSON grande con fotos
+        patterns = [
+            r'<script[^>]+id=["\']__NEXT_DATA__["\'][^>]*>(.*?)</script>',
+            r'<script[^>]+type=["\']application/json["\'][^>]*>(.*?)</script>',
+        ]
+        candidates: list[str] = []
+        for pattern in patterns:
+            for m in re.finditer(pattern, html, re.I | re.S):
+                script_content = m.group(1).strip()
+                if not script_content:
+                    continue
+                try:
+                    data = json.loads(script_content)
+                except Exception:
+                    # Si no parsea limpio, buscar URLs directamente con regex
+                    for url_raw in re.findall(r"""https?:\\/\\/[^\s"'<>]+""", script_content, re.I):
+                        candidates.append(ScraperService._decode_json_string(url_raw))
+                    for url_raw in re.findall(r"""https?://[^\s"'<>]+""", script_content, re.I):
+                        candidates.append(url_raw)
+                    continue
+                # Recorrer el JSON buscando todas las strings que parezcan imágenes
+                ScraperService._collect_image_strings_from_json(data, candidates)
+
+        return ScraperService._filter_image_urls(candidates, strict=True)
+
+    # Claves JSON cuyo valor es probablemente una URL de foto de propiedad.
+    _PHOTO_KEY_HINTS: frozenset[str] = frozenset({
+        "url", "src", "href",
+        "photo", "photos", "foto", "fotos",
+        "image", "images", "imagen", "imagenes",
+        "picture", "pictures", "pic", "pics",
+        "thumbnail", "thumbnails", "thumb", "thumbs",
+        "gallery", "galeria", "media",
+        "fullurl", "fullimage", "bigimage", "mainimage",
+        "coverimage", "coverphoto", "mainphoto",
+    })
+
+    @staticmethod
+    def _collect_image_strings_from_json(
+        node: Any, out: list[str], depth: int = 0, parent_key: str = ""
+    ) -> None:
+        """Recorre recursivamente un JSON y agrega a `out` solo las strings bajo
+        claves relacionadas con fotos (url, photo, image, thumbnail, etc.)."""
+        if depth > 20:
+            return
+        if isinstance(node, str):
+            pk = parent_key.lower()
+            is_photo_key = any(hint in pk for hint in ScraperService._PHOTO_KEY_HINTS)
+            if not is_photo_key:
+                return
+            val = node.strip()
+            if val.startswith(("http://", "https://", "//")) and len(val) > 10:
+                out.append(val if val.startswith("http") else f"https:{val}")
+        elif isinstance(node, dict):
+            for k, v in node.items():
+                ScraperService._collect_image_strings_from_json(v, out, depth + 1, parent_key=k)
+        elif isinstance(node, list):
+            for item in node:
+                ScraperService._collect_image_strings_from_json(item, out, depth + 1, parent_key=parent_key)
+
     def _select_image_urls(
         self,
         *,
@@ -215,10 +285,14 @@ class ScraperService:
         html: str,
         llm_urls: list[str],
         firecrawl_urls: list[str],
+        log: Callable[[str], None] | None = None,
     ) -> list[str]:
         focused_markdown = self._focus_listing_content(markdown)
         focused_html = self._focus_listing_content(html)
         gallery_limit = self._extract_gallery_limit(focused_markdown, focused_html)
+
+        # Extracción específica de __NEXT_DATA__ (Next.js / ZonaProp / Argenprop)
+        next_data_urls = self._extract_image_urls_from_next_data(html)
 
         primary_candidates: list[str] = []
         for group in (
@@ -229,32 +303,45 @@ class ScraperService:
             self._append_unique_urls(primary_candidates, group)
 
         dominant_primary = self._keep_dominant_image_group(primary_candidates)
-        if portal == "zonaprop" and len(dominant_primary) >= MIN_PRIMARY_GALLERY_IMAGES:
-            primary_candidates = dominant_primary
 
-        if portal == "zonaprop" and primary_candidates:
+        # Solo filtramos por preferred_group cuando tenemos un grupo dominante sólido.
+        use_preferred_group = (
+            portal == "zonaprop"
+            and len(dominant_primary) >= MIN_PRIMARY_GALLERY_IMAGES
+        )
+
+        if use_preferred_group:
+            primary_candidates = dominant_primary
             merged: list[str] = []
             preferred_group = self._image_group_key(primary_candidates[0])
             self._append_unique_urls(merged, primary_candidates, preferred_group=preferred_group)
             for group in (
-                self._filter_image_urls(llm_urls),
-                self._filter_image_urls(firecrawl_urls),
+                next_data_urls,
+                self._filter_image_urls(llm_urls, strict=False),
+                self._filter_image_urls(firecrawl_urls, strict=False),
                 self._extract_contextual_image_urls_from_html(html),
             ):
                 self._append_unique_urls(merged, group, preferred_group=preferred_group)
-            return merged[: gallery_limit or MAX_IMAGES]
+            result = merged[: gallery_limit or MAX_IMAGES]
+        else:
+            merged = []
+            for group in (
+                next_data_urls,
+                primary_candidates,
+                self._filter_image_urls(llm_urls, strict=False),
+                self._filter_image_urls(firecrawl_urls, strict=False),
+                self._extract_contextual_image_urls_from_html(html),
+                self._extract_image_urls_from_html(html),
+                self._extract_image_urls_from_markdown(markdown),
+            ):
+                self._append_unique_urls(merged, group)
+            result = merged[: gallery_limit or MAX_IMAGES]
 
-        merged: list[str] = []
-        for group in (
-            primary_candidates,
-            self._filter_image_urls(llm_urls),
-            self._filter_image_urls(firecrawl_urls),
-            self._extract_contextual_image_urls_from_html(html),
-            self._extract_image_urls_from_html(html),
-            self._extract_image_urls_from_markdown(markdown),
-        ):
-            self._append_unique_urls(merged, group)
-        return merged[: gallery_limit or MAX_IMAGES]
+        if log:
+            log(f"  next_data_urls={len(next_data_urls)} primary={len(primary_candidates)} llm={len(llm_urls)} firecrawl={len(firecrawl_urls)} → final={len(result)}")
+            for i, u in enumerate(result[:8]):
+                log(f"  img[{i}]: {u[:100]}")
+        return result
 
     @staticmethod
     def _append_unique_urls(target: list[str], urls: list[str], preferred_group: str | None = None) -> None:
@@ -313,6 +400,7 @@ class ScraperService:
         required_tokens = (
             "image", "images", "photo", "photos", "gallery",
             "carousel", "cover", "slide", "multimedia",
+            "foto", "fotos", "galeria", "galería", "slider",
         )
         blocked_tokens = (
             "logo", "favicon", "sprite", "placeholder",
@@ -377,8 +465,19 @@ class ScraperService:
 
     @staticmethod
     def _extract_listing_id_from_url(source_url: str) -> str:
+        # ZonaProp: -58320209.html
         match = re.search(r"-(\d{6,})\.html", source_url or "", re.I)
-        return match.group(1) if match else ""
+        if match:
+            return match.group(1)
+        # Argenprop: --5918487 al final de la URL
+        match = re.search(r"--(\d{5,})(?:[/?#]|$)", source_url or "")
+        if match:
+            return match.group(1)
+        # MercadoLibre: -MLA-XXXXXXXXX o /MLA-XXXXXXXXX
+        match = re.search(r"[/-]MLA-?(\d{6,})", source_url or "", re.I)
+        if match:
+            return match.group(1)
+        return ""
 
     @staticmethod
     def _extract_listing_context(html: str, listing_id: str) -> str:
@@ -691,11 +790,17 @@ class ScraperService:
         return ScraperService._filter_image_urls(urls)
 
     @staticmethod
-    def _filter_image_urls(urls: list[str]) -> list[str]:
+    def _filter_image_urls(urls: list[str], strict: bool = True) -> list[str]:
         blacklist_substrings = (
             "logo", "favicon", "icon", "sprite", "placeholder",
             "watermark", "notesicon", "fav-", "fav_icon", ".svg",
             "floorplan", "planos", "plano", "staticmap", "mapa",
+        )
+        image_path_tokens = (
+            "/images/", "/image/", "/photos/", "/photo/",
+            "/fotos/", "/foto/", "/imagenes/", "/imagen/",
+            "/img/", "/avisos/", "/media/", "/gallery/",
+            "img=", "image=", "photo=",
         )
         filtered: list[str] = []
         seen_keys: set[str] = set()
@@ -710,12 +815,13 @@ class ScraperService:
                 continue
             if re.search(r"\.(css|js|svg|gif|ico|woff2?)(\?|$)", lu):
                 continue
-            looks_like_image = (
-                re.search(r"\.(jpg|jpeg|png|webp|avif)(\?|$)", lu)
-                or any(token in lu for token in ("/images/", "/image/", "/photos/", "/photo/", "img=", "image=", "photo="))
-            )
-            if not looks_like_image:
-                continue
+            if strict:
+                looks_like_image = (
+                    re.search(r"\.(jpg|jpeg|png|webp|avif)(\?|$)", lu)
+                    or any(token in lu for token in image_path_tokens)
+                )
+                if not looks_like_image:
+                    continue
             dedupe_key = ScraperService._image_dedupe_key(clean_url)
             if dedupe_key in seen_keys:
                 continue
@@ -735,11 +841,15 @@ class ScraperService:
         def _is_noise(line: str) -> bool:
             if not line:
                 return False
-            if re.search(r"\b(Favorito|Compartir|Notas personales|Ocultar aviso|Ver menos)\b", line, re.I):
+            if re.search(r"\b(Favorito|Compartir|Notas personales|Ocultar aviso|Ver menos|Ver más avisos|Ver más anuncios)\b", line, re.I):
                 return True
+            # Links markdown de navegación: [texto](url)
             if re.search(r"^\[.+\]\(https?://", line):
                 return True
             if re.fullmatch(r"!?(\[[^\]]*\])?!?\[[^\]]*\]\([^)]+\)\s*", line):
+                return True
+            # Tiles de mapa u otras líneas con múltiples imágenes inline
+            if len(re.findall(r"!\[[^\]]*\]\(https?://", line)) >= 2:
                 return True
             if re.search(r"!\[[^\]]*\]\(https?://", line):
                 return True
@@ -968,7 +1078,7 @@ class ScraperService:
                 title = re.sub(r"\s+", " ", unescape(match.group(1))).strip()
         if not title:
             return ""
-        title = re.sub(r"\s+\|\s+Zonaprop.*$", "", title, flags=re.I)
+        title = re.sub(r"\s*[|\-—]\s*(?:ZonaProp|Argenprop|MercadoLibre|Propiedades\.com).*$", "", title, flags=re.I)
         return ScraperService._clean_title(title)
 
     @staticmethod
@@ -1008,6 +1118,12 @@ class ScraperService:
             ScraperService._decode_json_string(url)
             for url in re.findall(r"""https?:\\/\\/[^\s"'<>]+""", html, re.I)
         )
+        # Lazy-loaded images: data-src, data-lazy, data-url, data-original, data-image
+        for attr in ("data-src", "data-lazy", "data-url", "data-original", "data-image", "data-bg"):
+            for match in re.finditer(
+                rf'{re.escape(attr)}=["\']?(https?://[^\s"\'<>]+)', html, re.I
+            ):
+                urls.append(match.group(1))
         return ScraperService._filter_image_urls(urls)
 
     # FIX: extrae la dirección completa desde el HTML
@@ -1094,7 +1210,7 @@ class ScraperService:
         if not text:
             return ""
         patterns = [
-            r"Descripci[oó]n\s*(?:completa\s*)?(.+?)(?:Preguntas para la inmobiliaria|Conocé más sobre|Leer menos|Características|Servicios|Ubicación|Mapa|Propiedades similares)",
+            r"Descripci[oó]n\s*(?:completa\s*)?(.+?)(?:Preguntas para la inmobiliaria|Conocé más sobre|Leer menos|Características|Caracter[ií]sticas|Servicios|Ubicaci[oó]n|Mapa|Ver en Google Maps|Ambientes|Propiedades similares|Anuncios similares)",
             r"(Venta de .*?(?:Capital Federal|Buenos Aires)\..+?)(?:LEPORE|AVISO LEGAL|XINTEL|Leer menos|Preguntas para la inmobiliaria)",
             r"(Departamento .*?(?:Capital Federal|Buenos Aires)\..+?)(?:LEPORE|AVISO LEGAL|XINTEL|Leer menos|Preguntas para la inmobiliaria)",
         ]
@@ -1176,7 +1292,10 @@ class ScraperService:
                 continue
             if re.search(r"(USD|U\$S|AR\$|\$)", line, re.I):
                 continue
-            if re.search(r"\b(favorito|compartir|publicado|actualizado)\b", line, re.I):
+            if re.search(r"\b(favorito|compartir|publicado|actualizado|ver más avisos|ver más anuncios)\b", line, re.I):
+                continue
+            # Ignorar líneas que son links markdown: [texto](url)
+            if re.search(r"^\[.+\]\(https?://", line):
                 continue
             if re.search(r"[A-Za-zÁÉÍÓÚáéíóúñ]", line):
                 return ScraperService._clean_title(line)

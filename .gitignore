@@ -2,3 +2,13 @@ downloaded_files/
 users.json
 properties.db
 static/properties/
+
+.claude
+CLAUDE.md
+
+.env
+venv/
+
+_pycache__/
+__pycache__/
+*log

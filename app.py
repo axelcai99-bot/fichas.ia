@@ -393,7 +393,18 @@ def property_detail(property_id: int):
     if not prop:
         abort(404)
 
-    images = prop.get("image_paths") or []
+    image_paths = prop.get("image_paths") or []
+    source_image_urls = prop.get("source_image_urls") or []
+
+    # Si sólo hay 1 imagen local (descarga probablemente fallida) y tenemos
+    # URLs originales del scraping, usamos esas como fallback directo.
+    if len(image_paths) <= 1 and len(source_image_urls) > 1:
+        images = source_image_urls
+    elif image_paths:
+        images = image_paths
+    else:
+        images = []
+
     if not images:
         placeholder = PropertyService._placeholder_svg_url()
         images = [placeholder] * 5

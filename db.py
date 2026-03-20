@@ -60,6 +60,7 @@ def init_db() -> None:
         )
         _ensure_properties_owner_column(conn)
         _ensure_properties_source_portal_column(conn)
+        _ensure_properties_source_image_urls_column(conn)
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS clients (
@@ -190,3 +191,10 @@ def _ensure_properties_source_portal_column(conn: sqlite3.Connection) -> None:
     if "source_portal" not in col_names:
         conn.execute("ALTER TABLE properties ADD COLUMN source_portal TEXT")
         conn.execute("UPDATE properties SET source_portal = 'zonaprop' WHERE source_portal IS NULL OR source_portal = ''")
+
+
+def _ensure_properties_source_image_urls_column(conn: sqlite3.Connection) -> None:
+    cols = conn.execute("PRAGMA table_info(properties)").fetchall()
+    col_names = {c["name"] for c in cols}
+    if "source_image_urls_json" not in col_names:
+        conn.execute("ALTER TABLE properties ADD COLUMN source_image_urls_json TEXT NOT NULL DEFAULT '[]'")

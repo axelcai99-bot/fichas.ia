@@ -28,6 +28,7 @@ class PropertyService:
         scraped: dict[str, Any],
         log,
     ) -> int:
+        source_image_urls = scraped.get("image_urls", []) or []
         property_id = self.property_repo.create_property(
             {
                 "owner_username": owner_username,
@@ -40,6 +41,7 @@ class PropertyService:
                 "caracteristicas": scraped.get("caracteristicas", []),
                 "info_adicional": scraped.get("info_adicional", {}),
                 "image_paths": [],
+                "source_image_urls": source_image_urls,
                 "agent_name": agent_name,
                 "agent_whatsapp": agent_whatsapp,
                 "form_url": form_url,
@@ -93,6 +95,13 @@ class PropertyService:
                         last_err = e
                 if last_err is not None:
                     raise last_err
+                # Filtrar imágenes demasiado pequeñas (iconos, badges, UI).
+                dims = self._read_image_dimensions(data)
+                if dims is not None:
+                    w, h = dims
+                    if min(w, h) < 250:
+                        log(f"Imagen #{index} omitida (resolución {w}x{h}, probable ícono)")
+                        continue
                 filename = f"{index:02d}{ext}"
                 file_path = os.path.join(target_dir, filename)
                 with open(file_path, "wb") as f:
@@ -137,6 +146,52 @@ class PropertyService:
             # Si falla el borrado de imagenes no bloqueamos la eliminacion en BD.
             pass
         return True
+
+    @staticmethod
+    def _read_image_dimensions(data: bytes) -> tuple[int, int] | None:
+        """Devuelve (ancho, alto) en píxeles para JPEG, PNG y WebP sin librerías externas.
+        Retorna None si el formato no es reconocible."""
+        if len(data) < 24:
+            return None
+
+        # PNG: signature + IHDR chunk
+        if data[:8] == b'\x89PNG\r\n\x1a\n' and len(data) >= 24:
+            w = int.from_bytes(data[16:20], 'big')
+            h = int.from_bytes(data[20:24], 'big')
+            return (w, h)
+
+        # WebP: RIFF....WEBP
+        if data[:4] == b'RIFF' and data[8:12] == b'WEBP' and len(data) >= 30:
+            chunk = data[12:16]
+            if chunk == b'VP8 ':   # lossy
+                w = int.from_bytes(data[26:28], 'little') & 0x3FFF
+                h = int.from_bytes(data[28:30], 'little') & 0x3FFF
+                return (w, h)
+            if chunk == b'VP8L' and len(data) >= 25:  # lossless
+                bits = int.from_bytes(data[21:25], 'little')
+                w = (bits & 0x3FFF) + 1
+                h = ((bits >> 14) & 0x3FFF) + 1
+                return (w, h)
+            if chunk == b'VP8X' and len(data) >= 30:  # extended
+                w = int.from_bytes(data[24:27], 'little') + 1
+                h = int.from_bytes(data[27:30], 'little') + 1
+                return (w, h)
+
+        # JPEG: scan for SOF marker
+        if data[:2] == b'\xff\xd8':
+            i = 2
+            while i < len(data) - 3:
+                if data[i] != 0xFF:
+                    break
+                marker = data[i + 1]
+                if marker in (0xC0, 0xC1, 0xC2) and i + 9 <= len(data):
+                    h = int.from_bytes(data[i + 5:i + 7], 'big')
+                    w = int.from_bytes(data[i + 7:i + 9], 'big')
+                    return (w, h)
+                seg_len = int.from_bytes(data[i + 2:i + 4], 'big')
+                i += 2 + seg_len
+
+        return None
 
     @staticmethod
     def _guess_ext(url: str, headers: Message | None = None) -> str:
