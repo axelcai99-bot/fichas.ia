@@ -1,11 +1,21 @@
 import hashlib
 from typing import Any
 
+from werkzeug.security import check_password_hash, generate_password_hash
+
 from repositories.user_repository import UserRepository
 
 
 def hash_pw(pw: str) -> str:
-    return hashlib.sha256(pw.encode()).hexdigest()
+    return generate_password_hash(pw)
+
+
+def _verify_pw(stored: str, pw: str) -> bool:
+    """Verifica contraseña soportando hashes werkzeug (nuevos) y SHA256 (legacy)."""
+    if stored.startswith("pbkdf2:") or stored.startswith("scrypt:"):
+        return check_password_hash(stored, pw)
+    # Legacy SHA256 sin prefijo
+    return stored == hashlib.sha256(pw.encode()).hexdigest()
 
 
 class AuthService:
@@ -18,8 +28,12 @@ class AuthService:
             return None
         if not user.get("active", True):
             return None
-        if user.get("password") != hash_pw(password):
+        if not _verify_pw(user.get("password", ""), password):
             return None
+        # Migrar hash legacy SHA256 a werkzeug en el próximo login exitoso
+        stored = user.get("password", "")
+        if not (stored.startswith("pbkdf2:") or stored.startswith("scrypt:")):
+            self.user_repo.update_password(username, hash_pw(password))
         return user
 
     def change_password(self, username: str, current_pw: str, new_pw: str) -> tuple[bool, str]:

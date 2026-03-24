@@ -46,6 +46,7 @@ scraper_service = ScraperService()
 property_service = PropertyService(property_repo, base_dir=BASE_DIR)
 
 JOBS: dict = {}
+_jobs_lock = threading.Lock()
 VALID_CLIENT_TYPES = {"ph", "casa", "depto", "otro"}
 VALID_CLIENT_ZONAS = {
     "agronomia", "almagro", "balvanera", "barracas", "belgrano", "boedo", "caballito",
@@ -61,6 +62,8 @@ VALID_CLIENT_ZONAS = {
 }
 
 def _debug_log(run_id: str, hypothesis_id: str, location: str, message: str, data: dict) -> None:
+    if not os.environ.get("DEBUG_LOG"):
+        return
     payload = {
         "sessionId": "5ab736",
         "runId": run_id,
@@ -341,13 +344,14 @@ def generar():
 
     job_id = uuid.uuid4().hex
     log_queue = queue.Queue()
-    JOBS[job_id] = {
-        "queue": log_queue,
-        "status": "running",
-        "result_url": None,
-        "error_message": None,
-        "user": username,
-    }
+    with _jobs_lock:
+        JOBS[job_id] = {
+            "queue": log_queue,
+            "status": "running",
+            "result_url": None,
+            "error_message": None,
+            "user": username,
+        }
 
     threading.Thread(
         target=_run_generation,
@@ -360,25 +364,30 @@ def generar():
 @app.route("/api/stream/<job_id>")
 @login_required
 def stream(job_id):
-    job = JOBS.get(job_id)
+    with _jobs_lock:
+        job = JOBS.get(job_id)
     if not job or job.get("user") != session["username"]:
         abort(403)
 
     def generate():
-        while True:
-            try:
-                msg = job["queue"].get(timeout=30)
-                if msg == "__DONE__":
-                    result = job.get("result_url") or ""
-                    yield f"event: done\ndata: {result}\n\n"
-                    break
-                if msg == "__ERROR__":
-                    error_msg = (job.get("error_message") or "Error inesperado").replace("\n", " ")
-                    yield f"event: failed\ndata: {error_msg}\n\n"
-                    break
-                yield f"data: {msg.replace(chr(10), ' ')}\n\n"
-            except queue.Empty:
-                yield "data: trabajando...\n\n"
+        try:
+            while True:
+                try:
+                    msg = job["queue"].get(timeout=30)
+                    if msg == "__DONE__":
+                        result = job.get("result_url") or ""
+                        yield f"event: done\ndata: {result}\n\n"
+                        break
+                    if msg == "__ERROR__":
+                        error_msg = (job.get("error_message") or "Error inesperado").replace("\n", " ")
+                        yield f"event: failed\ndata: {error_msg}\n\n"
+                        break
+                    yield f"data: {msg.replace(chr(10), ' ')}\n\n"
+                except queue.Empty:
+                    yield "data: trabajando...\n\n"
+        finally:
+            with _jobs_lock:
+                JOBS.pop(job_id, None)
 
     return Response(
         stream_with_context(generate()),
@@ -388,6 +397,7 @@ def stream(job_id):
 
 
 @app.route("/propiedad/<int:property_id>")
+@login_required
 def property_detail(property_id: int):
     prop = property_repo.get_property(property_id)
     if not prop:
@@ -646,7 +656,8 @@ def _repair_text(value: str) -> str:
 
 
 def _run_generation(job_id, source_url, agent_name, agent_whatsapp, form_url, run_id: str | None = None):
-    job = JOBS[job_id]
+    with _jobs_lock:
+        job = JOBS[job_id]
     q = job["queue"]
     run_id = run_id or f"run-{int(time.time() * 1000)}"
 

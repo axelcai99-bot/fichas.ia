@@ -16,8 +16,8 @@ def get_connection() -> sqlite3.Connection:
 
 
 def hash_pw(pw: str) -> str:
-    import hashlib
-    return hashlib.sha256(pw.encode()).hexdigest()
+    from werkzeug.security import generate_password_hash
+    return generate_password_hash(pw)
 
 
 def init_db() -> None:
