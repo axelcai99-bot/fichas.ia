@@ -753,23 +753,30 @@ class ScraperService:
                 start_idx = i + 1
                 break
 
+        # Secciones de ZonaProp que marcan el fin real de la descripción
+        _SECTION_STOPS = re.compile(
+            r"^(CARACTER[IÍ]STICAS|SERVICIOS|UBICACI[OÓ]N|MAPA|PROPIEDADES SIMILARES"
+            r"|DATOS DEL AVISO|AVISO LEGAL|LEPORE|XINTEL|SITUAR)(\s.*)?$",
+            re.I,
+        )
+
         collected: list[str] = []
         if start_idx != -1:
             for l in lines[start_idx:]:
                 if re.search(r"Preguntas para la inmobiliaria|Seleccioná una o más preguntas", l, re.I):
                     break
+                if _SECTION_STOPS.match(l):
+                    break
                 if not l:
                     if collected:
                         collected.append("")
                     continue
-                if re.fullmatch(r"[A-ZÁÉÍÓÚÑ ]{4,}", l) and len(collected) > 3:
-                    break
                 if _is_noise(l):
                     continue
                 if l.strip().lower() == "completa":
                     continue
                 collected.append(l)
-                if sum(len(x) for x in collected) > 2500:
+                if sum(len(x) for x in collected) > 6000:
                     break
             text_result = "\n".join(collected).strip()
             if text_result:
@@ -1094,9 +1101,9 @@ class ScraperService:
         if not text:
             return ""
         patterns = [
-            r"Descripci[oó]n\s*(?:completa\s*)?(.+?)(?:Preguntas para la inmobiliaria|Conocé más sobre|Leer menos|Características|Servicios|Ubicación|Mapa|Propiedades similares)",
-            r"(Venta de .*?(?:Capital Federal|Buenos Aires)\..+?)(?:LEPORE|AVISO LEGAL|XINTEL|Leer menos|Preguntas para la inmobiliaria)",
-            r"(Departamento .*?(?:Capital Federal|Buenos Aires)\..+?)(?:LEPORE|AVISO LEGAL|XINTEL|Leer menos|Preguntas para la inmobiliaria)",
+            r"Descripci[oó]n\s*(?:completa\s*)?(.+?)(?:Preguntas para la inmobiliaria|Conocé más sobre|Leer menos|Características|Servicios|Ubicación|Mapa|Propiedades similares|Matrícula CPI|Nota Importante)",
+            r"(Venta de .*?(?:Capital Federal|Buenos Aires)\..+?)(?:LEPORE|AVISO LEGAL|XINTEL|Leer menos|Preguntas para la inmobiliaria|Matrícula CPI)",
+            r"(Departamento .*?(?:Capital Federal|Buenos Aires)\..+?)(?:LEPORE|AVISO LEGAL|XINTEL|Leer menos|Preguntas para la inmobiliaria|Matrícula CPI)",
         ]
         for pattern in patterns:
             match = re.search(pattern, text, re.I | re.S)
@@ -1117,6 +1124,11 @@ class ScraperService:
         text = re.sub(r"\bAVISO LEGAL:.*$", "", text, flags=re.I | re.S)
         text = re.sub(r"\bXINTEL.*$", "", text, flags=re.I | re.S)
         text = re.sub(r"\bEsta unidad es apta para personas.*$", "", text, flags=re.I | re.S)
+        # Eliminar disclaimer legal al final (matrícula CPI, leyes, etc.)
+        text = re.sub(r"\bMatr[ií]cula CPI\b.*$", "", text, flags=re.I | re.S)
+        text = re.sub(r"\bEn cumplimiento de las leyes vigentes\b.*$", "", text, flags=re.I | re.S)
+        text = re.sub(r"\bNota Importante:.*$", "", text, flags=re.I | re.S)
+        text = re.sub(r"\bSITUAR\b.*$", "", text, flags=re.I | re.S)
         text = re.sub(r"\n{3,}", "\n\n", text)
         text = re.sub(r"[ \t]{2,}", " ", text)
         return text.strip(" .\n")
