@@ -778,12 +778,12 @@ class ScraperService:
                 collected.append(l)
                 if sum(len(x) for x in collected) > 6000:
                     break
-            text_result = "\n".join(collected).strip()
+            text_result = ScraperService._clean_description("\n".join(collected).strip())
             if text_result:
                 return text_result
 
         candidate = ScraperService._best_text_block(text)
-        return candidate.strip()
+        return ScraperService._clean_description(candidate.strip())
 
     @staticmethod
     def _extract_features(text: str, html: str) -> list[str]:
