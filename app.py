@@ -1,6 +1,7 @@
 import os
 import queue
 import re
+import secrets
 import threading
 import urllib.error
 import urllib.parse
@@ -8,6 +9,8 @@ import urllib.request
 import uuid
 import json
 import time
+from collections import defaultdict
+from datetime import datetime
 from functools import wraps
 
 from flask import (
@@ -61,6 +64,46 @@ client_repo = ClientRepository()
 auth_service = AuthService(user_repo)
 scraper_service = ScraperService()
 property_service = PropertyService(property_repo, base_dir=BASE_DIR)
+
+# ── CSRF ──────────────────────────────────────
+def _get_csrf_token():
+    if "_csrf" not in session:
+        session["_csrf"] = secrets.token_hex(32)
+    return session["_csrf"]
+
+
+def csrf_protect(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if request.method in ("POST", "PUT", "DELETE"):
+            token = (request.headers.get("X-CSRF-Token") or
+                     (request.json or {}).get("_csrf") if request.is_json else None) or \
+                    request.form.get("_csrf", "")
+            if not token or token != session.get("_csrf"):
+                return jsonify({"error": "Token CSRF inválido. Recargá la página."}), 403
+        return f(*args, **kwargs)
+    return decorated
+
+
+app.jinja_env.globals["csrf_token"] = _get_csrf_token
+
+
+# ── Rate limiter (login) ─────────────────────
+_login_attempts: dict[str, list[float]] = defaultdict(list)
+_LOGIN_MAX_ATTEMPTS = 5
+_LOGIN_WINDOW_SECONDS = 300  # 5 min
+
+
+def _is_rate_limited(key: str) -> bool:
+    now = time.time()
+    attempts = _login_attempts[key]
+    _login_attempts[key] = [t for t in attempts if now - t < _LOGIN_WINDOW_SECONDS]
+    return len(_login_attempts[key]) >= _LOGIN_MAX_ATTEMPTS
+
+
+def _record_login_attempt(key: str):
+    _login_attempts[key].append(time.time())
+
 
 JOBS: dict = {}
 _jobs_lock = threading.Lock()
@@ -225,13 +268,19 @@ def login():
     if request.method == "POST":
         username = request.form.get("username", "").strip().lower()
         password = request.form.get("password", "").strip()
-        user = auth_service.validate_login(username, password)
-        if user:
-            session.clear()
-            session["username"] = username
-            session["role"] = user.get("role", "user")
-            return redirect(url_for("dashboard"))
-        error = "Usuario o contraseña incorrectos"
+        client_ip = request.remote_addr or "unknown"
+        rate_key = f"{client_ip}:{username}"
+        if _is_rate_limited(rate_key):
+            error = "Demasiados intentos. Esperá unos minutos."
+        else:
+            user = auth_service.validate_login(username, password)
+            if user:
+                session.clear()
+                session["username"] = username
+                session["role"] = user.get("role", "user")
+                return redirect(url_for("dashboard"))
+            _record_login_attempt(rate_key)
+            error = "Usuario o contraseña incorrectos"
     return render_template("login.html", error=error)
 
 
@@ -258,6 +307,7 @@ def dashboard():
 
 @app.route("/api/perfil", methods=["POST"])
 @login_required
+@csrf_protect
 def guardar_perfil():
     username = session["username"]
     data = request.json or {}
@@ -272,6 +322,7 @@ def guardar_perfil():
 
 @app.route("/api/cambiar_password", methods=["POST"])
 @login_required
+@csrf_protect
 def cambiar_password():
     username = session["username"]
     data = request.json or {}
@@ -293,6 +344,7 @@ def listar_usuarios():
 
 @app.route("/api/admin/crear_usuario", methods=["POST"])
 @admin_required
+@csrf_protect
 def crear_usuario():
     data = request.json or {}
     ok, payload = auth_service.admin_create_user(
@@ -307,6 +359,7 @@ def crear_usuario():
 
 @app.route("/api/admin/toggle_usuario", methods=["POST"])
 @admin_required
+@csrf_protect
 def toggle_usuario():
     data = request.json or {}
     username = data.get("username", "")
@@ -320,6 +373,7 @@ def toggle_usuario():
 
 @app.route("/api/admin/reset_password", methods=["POST"])
 @admin_required
+@csrf_protect
 def reset_password():
     data = request.json or {}
     ok, msg = auth_service.admin_reset_password(
@@ -334,6 +388,7 @@ def reset_password():
 
 @app.route("/api/admin/delete_usuario", methods=["POST"])
 @admin_required
+@csrf_protect
 def delete_usuario():
     data = request.json or {}
     ok, msg = auth_service.admin_delete_user(
@@ -348,6 +403,7 @@ def delete_usuario():
 
 @app.route("/api/generar", methods=["POST"])
 @login_required
+@csrf_protect
 def generar():
     run_id = f"run-{int(time.time() * 1000)}"
     username = session["username"]
@@ -527,15 +583,50 @@ def portals_list():
 def properties_list():
     username = session["username"]
     portal = (request.args.get("portal") or "").strip().lower()
+    page = max(1, int(request.args.get("page") or 1))
+    per_page = min(100, max(1, int(request.args.get("per_page") or 20)))
     available = property_repo.list_portals(owner_username=username)
     source_portal = portal if portal in available else None
-    items = property_repo.list_properties(limit=100, owner_username=username, source_portal=source_portal)
-    return jsonify(items)
+    result = property_repo.list_properties(
+        limit=per_page, offset=(page - 1) * per_page,
+        owner_username=username, source_portal=source_portal,
+    )
+    return jsonify(result)
 
 
 @app.route("/api/propiedades/<int:property_id>", methods=["DELETE"])
 @login_required
+@csrf_protect
 def delete_property(property_id: int):
+    username = session["username"]
+    deleted = property_repo.soft_delete_property(property_id, owner_username=username)
+    if not deleted:
+        return jsonify({"error": "Propiedad no encontrada"}), 404
+    return jsonify({"ok": True})
+
+
+@app.route("/api/propiedades/<int:property_id>/restaurar", methods=["POST"])
+@login_required
+@csrf_protect
+def restore_property(property_id: int):
+    username = session["username"]
+    restored = property_repo.restore_property(property_id, owner_username=username)
+    if not restored:
+        return jsonify({"error": "Propiedad no encontrada en papelera"}), 404
+    return jsonify({"ok": True})
+
+
+@app.route("/api/propiedades/papelera")
+@login_required
+def trash_properties():
+    username = session["username"]
+    return jsonify(property_repo.list_deleted_properties(owner_username=username))
+
+
+@app.route("/api/propiedades/<int:property_id>/eliminar-definitivo", methods=["DELETE"])
+@login_required
+@csrf_protect
+def permanent_delete_property(property_id: int):
     username = session["username"]
     deleted = property_service.delete_property(property_id, owner_username=username)
     if not deleted:
@@ -547,11 +638,16 @@ def delete_property(property_id: int):
 @login_required
 def list_clients():
     username = session["username"]
-    return jsonify(client_repo.list_clients(owner_username=username))
+    search = (request.args.get("q") or "").strip()
+    page = max(1, int(request.args.get("page") or 1))
+    per_page = min(100, max(1, int(request.args.get("per_page") or 50)))
+    result = client_repo.list_clients(owner_username=username, search=search, limit=per_page, offset=(page - 1) * per_page)
+    return jsonify(result)
 
 
 @app.route("/api/clientes", methods=["POST"])
 @login_required
+@csrf_protect
 def create_client():
     username = session["username"]
     data = request.json or {}
@@ -564,6 +660,7 @@ def create_client():
 
 @app.route("/api/clientes/<int:client_id>", methods=["PUT"])
 @login_required
+@csrf_protect
 def update_client(client_id: int):
     username = session["username"]
     data = request.json or {}
@@ -578,12 +675,125 @@ def update_client(client_id: int):
 
 @app.route("/api/clientes/<int:client_id>", methods=["DELETE"])
 @login_required
+@csrf_protect
 def delete_client(client_id: int):
     username = session["username"]
-    ok = client_repo.delete_client(client_id=client_id, owner_username=username)
+    ok = client_repo.soft_delete_client(client_id=client_id, owner_username=username)
     if not ok:
         return jsonify({"error": "Cliente no encontrado"}), 404
     return jsonify({"ok": True})
+
+
+@app.route("/api/clientes/<int:client_id>/restaurar", methods=["POST"])
+@login_required
+@csrf_protect
+def restore_client(client_id: int):
+    username = session["username"]
+    restored = client_repo.restore_client(client_id=client_id, owner_username=username)
+    if not restored:
+        return jsonify({"error": "Cliente no encontrado en papelera"}), 404
+    return jsonify({"ok": True})
+
+
+@app.route("/api/clientes/papelera")
+@login_required
+def trash_clients():
+    username = session["username"]
+    return jsonify(client_repo.list_deleted_clients(owner_username=username))
+
+
+# ── Client-Property Interests ──────────────────
+@app.route("/api/intereses", methods=["POST"])
+@login_required
+@csrf_protect
+def add_interest():
+    username = session["username"]
+    data = request.json or {}
+    client_id = data.get("client_id")
+    property_id = data.get("property_id")
+    nota = (data.get("nota") or "").strip()[:500]
+    if not client_id or not property_id:
+        return jsonify({"error": "Faltan client_id o property_id"}), 400
+    from db import get_connection
+    now = datetime.now().isoformat()
+    try:
+        with get_connection() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO client_property_interests (client_id, property_id, owner_username, nota, created_at) VALUES (?, ?, ?, ?, ?)",
+                (client_id, property_id, username, nota, now),
+            )
+            conn.commit()
+    except Exception:
+        return jsonify({"error": "Error al vincular"}), 500
+    return jsonify({"ok": True})
+
+
+@app.route("/api/intereses", methods=["DELETE"])
+@login_required
+@csrf_protect
+def remove_interest():
+    data = request.json or {}
+    client_id = data.get("client_id")
+    property_id = data.get("property_id")
+    username = session["username"]
+    from db import get_connection
+    with get_connection() as conn:
+        conn.execute(
+            "DELETE FROM client_property_interests WHERE client_id = ? AND property_id = ? AND owner_username = ?",
+            (client_id, property_id, username),
+        )
+        conn.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/intereses/cliente/<int:client_id>")
+@login_required
+def interests_by_client(client_id: int):
+    username = session["username"]
+    from db import get_connection
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT cpi.id, cpi.property_id, cpi.nota, cpi.created_at,
+                   p.titulo, p.precio, p.ubicacion
+            FROM client_property_interests cpi
+            JOIN properties p ON p.id = cpi.property_id
+            WHERE cpi.client_id = ? AND cpi.owner_username = ?
+            ORDER BY cpi.created_at DESC
+            """,
+            (client_id, username),
+        ).fetchall()
+    return jsonify([
+        {"id": r["id"], "property_id": r["property_id"], "nota": r["nota"],
+         "created_at": r["created_at"], "titulo": r["titulo"],
+         "precio": r["precio"], "ubicacion": r["ubicacion"]}
+        for r in rows
+    ])
+
+
+@app.route("/api/intereses/propiedad/<int:property_id>")
+@login_required
+def interests_by_property(property_id: int):
+    username = session["username"]
+    from db import get_connection
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT cpi.id, cpi.client_id, cpi.nota, cpi.created_at,
+                   c.nombre, c.telefono
+            FROM client_property_interests cpi
+            JOIN clients c ON c.id = cpi.client_id
+            WHERE cpi.property_id = ? AND cpi.owner_username = ?
+            ORDER BY cpi.created_at DESC
+            """,
+            (property_id, username),
+        ).fetchall()
+    return jsonify([
+        {"id": r["id"], "client_id": r["client_id"], "nota": r["nota"],
+         "created_at": r["created_at"], "nombre": r["nombre"],
+         "telefono": r["telefono"]}
+        for r in rows
+    ])
 
 
 def _merge_features(caracteristicas: list[str], detalles: dict) -> list[str]:
