@@ -804,7 +804,11 @@ def interests_by_property(property_id: int):
 def _is_detail_feature(feature: str) -> bool:
     """Return True if this feature string came from the structured detalles dict."""
     low = feature.lower()
-    return bool(re.search(r"m²\s*(tot|cub)", low) or re.search(r"\b(amb|baños|dorm)\.", low))
+    return bool(
+        re.search(r"m²\s*(tot|cub)", low)
+        or re.search(r"\b(amb|dorm)\.", low)
+        or re.search(r"\bbaños\b", low)
+    )
 
 
 def _merge_features(caracteristicas: list[str], detalles: dict) -> list[str]:
