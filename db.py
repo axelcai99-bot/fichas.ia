@@ -5,7 +5,7 @@ from datetime import datetime
 
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "properties.db")
+DB_PATH = os.environ.get("DB_PATH", "").strip() or os.path.join(BASE_DIR, "properties.db")
 USERS_JSON_PATH = os.path.join(BASE_DIR, "users.json")
 
 
@@ -102,6 +102,12 @@ def init_db() -> None:
             """
             CREATE INDEX IF NOT EXISTS idx_clients_owner_username
             ON clients(owner_username)
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_clients_updated_at
+            ON clients(updated_at DESC)
             """
         )
         conn.commit()

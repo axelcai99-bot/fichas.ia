@@ -34,9 +34,26 @@ from services.scraper_service import ScraperService
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY") or os.urandom(32).hex()
+_secret = os.environ.get("SECRET_KEY", "").strip()
+if not _secret:
+    import warnings
+    _secret = os.urandom(32).hex()
+    warnings.warn(
+        "SECRET_KEY no configurado — sesiones se perderán al reiniciar. "
+        "Configurá SECRET_KEY en las variables de entorno para producción.",
+        stacklevel=1,
+    )
+app.secret_key = _secret
 
 init_db()
+
+
+@app.after_request
+def _set_security_headers(response):
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
 
 user_repo = UserRepository()
 property_repo = PropertyRepository()
@@ -47,6 +64,15 @@ property_service = PropertyService(property_repo, base_dir=BASE_DIR)
 
 JOBS: dict = {}
 _jobs_lock = threading.Lock()
+_JOB_TTL_SECONDS = 600  # 10 min
+
+
+def _cleanup_stale_jobs():
+    now = time.time()
+    with _jobs_lock:
+        stale = [k for k, v in JOBS.items() if now - v.get("created_at", now) > _JOB_TTL_SECONDS]
+        for k in stale:
+            JOBS.pop(k, None)
 VALID_CLIENT_TYPES = {"ph", "casa", "depto", "otro"}
 VALID_CLIENT_ZONAS = {
     "agronomia", "almagro", "balvanera", "barracas", "belgrano", "boedo", "caballito",
@@ -65,7 +91,6 @@ def _debug_log(run_id: str, hypothesis_id: str, location: str, message: str, dat
     if not os.environ.get("DEBUG_LOG"):
         return
     payload = {
-        "sessionId": "5ab736",
         "runId": run_id,
         "hypothesisId": hypothesis_id,
         "location": location,
@@ -73,7 +98,7 @@ def _debug_log(run_id: str, hypothesis_id: str, location: str, message: str, dat
         "data": data,
         "timestamp": int(time.time() * 1000),
     }
-    log_path = os.path.join(BASE_DIR, "debug-5ab736.log")
+    log_path = os.path.join(BASE_DIR, "debug.log")
     with open(log_path, "a", encoding="utf-8") as f:
         f.write(json.dumps(payload, ensure_ascii=False) + "\n")
 
@@ -162,6 +187,10 @@ def login_required(f):
     def decorated(*args, **kwargs):
         if "username" not in session:
             return redirect(url_for("login"))
+        user = get_user(session["username"])
+        if not user or not user.get("active", True):
+            session.clear()
+            return redirect(url_for("login"))
         return f(*args, **kwargs)
 
     return decorated
@@ -173,7 +202,10 @@ def admin_required(f):
         if "username" not in session:
             return redirect(url_for("login"))
         user = get_user(session["username"])
-        if not user or user.get("role") != "admin":
+        if not user or not user.get("active", True):
+            session.clear()
+            return redirect(url_for("login"))
+        if user.get("role") != "admin":
             abort(403)
         return f(*args, **kwargs)
 
@@ -195,6 +227,7 @@ def login():
         password = request.form.get("password", "").strip()
         user = auth_service.validate_login(username, password)
         if user:
+            session.clear()
             session["username"] = username
             session["role"] = user.get("role", "user")
             return redirect(url_for("dashboard"))
@@ -342,6 +375,7 @@ def generar():
     whatsapp = data.get("whatsapp", user.get("whatsapp", "") if user else "").strip()
     form_url = data.get("form_url", user.get("form_url", "") if user else "").strip()
 
+    _cleanup_stale_jobs()
     job_id = uuid.uuid4().hex
     log_queue = queue.Queue()
     with _jobs_lock:
@@ -351,6 +385,7 @@ def generar():
             "result_url": None,
             "error_message": None,
             "user": username,
+            "created_at": time.time(),
         }
 
     threading.Thread(
@@ -452,6 +487,10 @@ def proxy_image():
     referer_url = (request.args.get("referer") or "").strip()
     if not re.match(r"^https?://", image_url, re.I):
         abort(400)
+    parsed = urllib.parse.urlparse(image_url)
+    if not parsed.hostname or parsed.hostname in ("localhost", "127.0.0.1", "0.0.0.0") or parsed.hostname.startswith("192.168.") or parsed.hostname.startswith("10.") or parsed.hostname.endswith(".local"):
+        abort(400)
+    referer_url = re.sub(r"[\r\n]", "", referer_url)
 
     origin = PropertyService._origin_from_url(referer_url)
     header_sets = [

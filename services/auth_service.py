@@ -40,7 +40,7 @@ class AuthService:
         if len(new_pw) < 6:
             return False, "La contraseña debe tener al menos 6 caracteres"
         user = self.user_repo.get_user(username)
-        if not user or user.get("password") != hash_pw(current_pw):
+        if not user or not _verify_pw(user.get("password", ""), current_pw):
             return False, "Contraseña actual incorrecta"
         self.user_repo.update_password(username, hash_pw(new_pw))
         return True, "ok"
