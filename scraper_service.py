@@ -839,19 +839,44 @@ class ScraperService:
         expand_script = """
                 (() => {
                   const clickByText = (texts) => {
-                    const nodes = Array.from(document.querySelectorAll('button, a, span, div'));
+                    const nodes = Array.from(document.querySelectorAll('button, a, span, div, p'));
+                    let clicked = false;
                     for (const node of nodes) {
                       const text = (node.innerText || node.textContent || '').trim().toLowerCase();
-                      if (texts.some(t => text.includes(t))) {
+                      if (texts.some(t => text === t || text.includes(t))) {
                         node.click();
-                        return true;
+                        clicked = true;
                       }
                     }
-                    return false;
+                    return clicked;
                   };
-                  clickByText(['aceptar', 'entendido']);
-                  clickByText(['leer más', 'ver más', 'mostrar más', 'ver descripción completa']);
-                  clickByText(['ver todas las fotos', 'ver fotos', 'más fotos']);
+
+                  // Aceptar cookies / modals
+                  clickByText(['aceptar', 'entendido', 'acepto']);
+
+                  // Expandir descripción — por texto
+                  clickByText(['leer más', 'leer mas', 'ver más', 'ver mas',
+                               'mostrar más', 'mostrar mas', 'ver descripción completa',
+                               'ver descripcion completa', 'ver detalle completo']);
+
+                  // Expandir descripción — por selectores CSS comunes de portales
+                  const selectors = [
+                    '[data-qa="POSTING_DESCRIPTION"] a',
+                    '[class*="read-more"]', '[class*="readMore"]', '[class*="ReadMore"]',
+                    '[class*="show-more"]', '[class*="showMore"]', '[class*="ShowMore"]',
+                    '[class*="expand"]', '[class*="ver-mas"]', '[class*="leer-mas"]',
+                    '.description-container a', '.description a.link',
+                    'button[class*="descri"]', 'a[class*="descri"]',
+                  ];
+                  for (const sel of selectors) {
+                    try {
+                      const el = document.querySelector(sel);
+                      if (el) el.click();
+                    } catch(e) {}
+                  }
+
+                  // Fotos
+                  clickByText(['ver todas las fotos', 'ver fotos', 'más fotos', 'mas fotos']);
                   return 'ok';
                 })();
                 """
@@ -868,14 +893,16 @@ class ScraperService:
                     }
                     return false;
                   };
-                  clickByText(['ver todas las fotos', 'ver fotos', 'más fotos']);
+                  clickByText(['ver todas las fotos', 'ver fotos', 'más fotos', 'mas fotos']);
                   return 'ok';
                 })();
                 """
         return [
-            {"type": "wait", "milliseconds": 1800},
+            {"type": "wait", "milliseconds": 2000},
             {"type": "executeJavascript", "script": expand_script},
-            {"type": "wait", "milliseconds": 2200},
+            {"type": "wait", "milliseconds": 1500},
+            {"type": "executeJavascript", "script": expand_script},
+            {"type": "wait", "milliseconds": 2000},
             {"type": "scroll", "direction": "down"},
             {"type": "wait", "milliseconds": 800},
             {"type": "executeJavascript", "script": photos_script},

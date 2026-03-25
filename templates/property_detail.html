@@ -120,15 +120,13 @@ body{font-family:'Inter',sans-serif;background:#f5f5f5;color:#404041;-webkit-fon
   </div>
 </div>
 
-<div id="modal" class="modal" onclick="if(event.target===this)closeModal()">
-  <div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center">
-    <button onclick="closeModal()" style="position:fixed;top:16px;right:20px;background:none;border:none;color:white;font-size:36px;cursor:pointer;line-height:1;z-index:10">&times;</button>
-    <button id="btn-prev" onclick="navPhoto(-1)" style="position:fixed;left:16px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.15);border:none;color:white;font-size:28px;width:48px;height:48px;border-radius:50%;cursor:pointer;z-index:10;backdrop-filter:blur(4px)">&#8249;</button>
-    <button id="btn-next" onclick="navPhoto(1)" style="position:fixed;right:16px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.15);border:none;color:white;font-size:28px;width:48px;height:48px;border-radius:50%;cursor:pointer;z-index:10;backdrop-filter:blur(4px)">&#8250;</button>
-    <div style="max-width:900px;max-height:85vh;display:flex;align-items:center;justify-content:center;padding:20px">
-      <img id="modal-img" src="" style="max-width:100%;max-height:80vh;object-fit:contain;border-radius:8px;display:block" alt="Foto">
-    </div>
-    <div id="photo-counter" style="position:fixed;bottom:20px;left:50%;transform:translateX(-50%);color:white;font-size:14px;font-weight:600;background:rgba(0,0,0,.5);padding:6px 16px;border-radius:20px;backdrop-filter:blur(4px)"></div>
+<div id="modal" class="modal" onclick="if(event.target===this||event.target.id==='modal-backdrop')closeModal()">
+  <div id="modal-backdrop" style="display:flex;align-items:center;justify-content:center;min-height:100vh;position:relative">
+    <button onclick="closeModal()" style="position:fixed;top:16px;right:20px;background:none;border:none;color:white;font-size:36px;cursor:pointer;line-height:1;z-index:10001">&times;</button>
+    <button id="btn-prev" onclick="event.stopPropagation();navPhoto(-1)" style="position:fixed;left:16px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.15);border:none;color:white;font-size:28px;width:48px;height:48px;border-radius:50%;cursor:pointer;z-index:10001;backdrop-filter:blur(4px)">&#8249;</button>
+    <button id="btn-next" onclick="event.stopPropagation();navPhoto(1)" style="position:fixed;right:16px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.15);border:none;color:white;font-size:28px;width:48px;height:48px;border-radius:50%;cursor:pointer;z-index:10001;backdrop-filter:blur(4px)">&#8250;</button>
+    <img id="modal-img" onclick="event.stopPropagation()" src="" style="max-width:90vw;max-height:85vh;object-fit:contain;border-radius:8px;display:block" alt="Foto">
+    <div id="photo-counter" style="position:fixed;bottom:20px;left:50%;transform:translateX(-50%);color:white;font-size:14px;font-weight:600;background:rgba(0,0,0,.5);padding:6px 16px;border-radius:20px;backdrop-filter:blur(4px);z-index:10001"></div>
   </div>
 </div>
 
