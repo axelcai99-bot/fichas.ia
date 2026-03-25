@@ -121,24 +121,43 @@ body{font-family:'Inter',sans-serif;background:#f5f5f5;color:#404041;-webkit-fon
 </div>
 
 <div id="modal" class="modal" onclick="if(event.target===this)closeModal()">
-  <div style="max-width:800px;margin:0 auto;position:relative">
+  <div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center">
     <button onclick="closeModal()" style="position:fixed;top:16px;right:20px;background:none;border:none;color:white;font-size:36px;cursor:pointer;line-height:1;z-index:10">&times;</button>
-    <div style="display:flex;flex-direction:column;gap:10px">
-      {% for image in images %}
-      <div style="margin-bottom:12px"><img id="mf{{ loop.index0 }}" src="{{ image }}" onerror="this.style.display='none'" style="width:100%;border-radius:8px;display:block" alt="Foto {{ loop.index }}"></div>
-      {% endfor %}
+    <button id="btn-prev" onclick="navPhoto(-1)" style="position:fixed;left:16px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.15);border:none;color:white;font-size:28px;width:48px;height:48px;border-radius:50%;cursor:pointer;z-index:10;backdrop-filter:blur(4px)">&#8249;</button>
+    <button id="btn-next" onclick="navPhoto(1)" style="position:fixed;right:16px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.15);border:none;color:white;font-size:28px;width:48px;height:48px;border-radius:50%;cursor:pointer;z-index:10;backdrop-filter:blur(4px)">&#8250;</button>
+    <div style="max-width:900px;max-height:85vh;display:flex;align-items:center;justify-content:center;padding:20px">
+      <img id="modal-img" src="" style="max-width:100%;max-height:80vh;object-fit:contain;border-radius:8px;display:block" alt="Foto">
     </div>
+    <div id="photo-counter" style="position:fixed;bottom:20px;left:50%;transform:translateX(-50%);color:white;font-size:14px;font-weight:600;background:rgba(0,0,0,.5);padding:6px 16px;border-radius:20px;backdrop-filter:blur(4px)"></div>
   </div>
 </div>
 
 <script>
+var IMAGES = {{ images|tojson }};
+var currentPhoto = 0;
 function showPhoto(i){
+  currentPhoto = i;
+  updateModalPhoto();
   document.getElementById('modal').classList.add('open');
   document.body.style.overflow='hidden';
-  setTimeout(function(){var el=document.getElementById('mf'+i);if(el)el.scrollIntoView({behavior:'auto',block:'start'});},60);
+}
+function updateModalPhoto(){
+  var img = document.getElementById('modal-img');
+  img.src = IMAGES[currentPhoto] || '';
+  document.getElementById('photo-counter').textContent = (currentPhoto+1)+' / '+IMAGES.length;
+  document.getElementById('btn-prev').style.visibility = currentPhoto > 0 ? 'visible' : 'hidden';
+  document.getElementById('btn-next').style.visibility = currentPhoto < IMAGES.length-1 ? 'visible' : 'hidden';
+}
+function navPhoto(dir){
+  var next = currentPhoto + dir;
+  if(next >= 0 && next < IMAGES.length){ currentPhoto = next; updateModalPhoto(); }
 }
 function closeModal(){document.getElementById('modal').classList.remove('open');document.body.style.overflow='';}
-document.addEventListener('keydown',function(e){if(e.key==='Escape')closeModal();});
+document.addEventListener('keydown',function(e){
+  if(e.key==='Escape') closeModal();
+  if(e.key==='ArrowLeft') navPhoto(-1);
+  if(e.key==='ArrowRight') navPhoto(1);
+});
 </script>
 </body>
 </html>

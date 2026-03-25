@@ -84,6 +84,19 @@ class PropertyRepository:
             "created_at": row["created_at"],
         }
 
+    def list_portals(self, owner_username: str | None = None) -> list[str]:
+        with get_connection() as conn:
+            if owner_username:
+                rows = conn.execute(
+                    "SELECT DISTINCT source_portal FROM properties WHERE owner_username = ? AND source_portal IS NOT NULL ORDER BY source_portal",
+                    (owner_username,),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT DISTINCT source_portal FROM properties WHERE source_portal IS NOT NULL ORDER BY source_portal",
+                ).fetchall()
+        return [r["source_portal"] for r in rows if r["source_portal"]]
+
     def list_properties(self, limit: int = 50, owner_username: str | None = None, source_portal: str | None = None) -> list[dict[str, Any]]:
         with get_connection() as conn:
             if owner_username and source_portal:

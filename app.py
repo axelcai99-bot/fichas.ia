@@ -475,13 +475,21 @@ def proxy_image():
     abort(502)
 
 
+@app.route("/api/portales")
+@login_required
+def portals_list():
+    username = session["username"]
+    portals = property_repo.list_portals(owner_username=username)
+    return jsonify(portals)
+
+
 @app.route("/propiedades")
 @login_required
 def properties_list():
     username = session["username"]
     portal = (request.args.get("portal") or "").strip().lower()
-    allowed = {"zonaprop", "argenprop", "mercadolibre"}
-    source_portal = portal if portal in allowed else None
+    available = property_repo.list_portals(owner_username=username)
+    source_portal = portal if portal in available else None
     items = property_repo.list_properties(limit=100, owner_username=username, source_portal=source_portal)
     return jsonify(items)
 

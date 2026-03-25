@@ -536,9 +536,6 @@ body {
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
             <select class="input" id="portal-filter" style="min-width:170px;padding:8px 10px" onchange="cargarPropiedadesActivas()">
               <option value="">Todos los portales</option>
-              <option value="zonaprop">ZonaProp</option>
-              <option value="argenprop">Argenprop</option>
-              <option value="mercadolibre">MercadoLibre</option>
             </select>
             <button class="btn btn-ghost" style="padding:8px 12px" onclick="cargarPropiedadesActivas()">Recargar</button>
           </div>
@@ -566,91 +563,103 @@ body {
 
     <!-- ── CLIENTES ───────────────────────────────────── -->
     <div class="panel" id="panel-clientes">
-      <div class="card" style="margin-bottom:14px">
-        <span class="card-label">Nuevo cliente</span>
-        <div class="field-grid">
-          <div class="field"><span class="field-label">Nombre</span><input class="input" id="c_nombre" type="text" placeholder="Nombre y apellido" oninput="normalizarNombreCliente(this)"></div>
-          <div class="field"><span class="field-label">Teléfono</span><input class="input" id="c_telefono" type="text" inputmode="numeric" placeholder="11..." oninput="normalizarTelefonoCliente(this)"></div>
-          <div class="field"><span class="field-label">Presupuesto</span><input class="input" id="c_presupuesto" type="text" inputmode="numeric" placeholder="100.000" oninput="normalizarPresupuestoCliente(this)"></div>
-          <div class="field"><span class="field-label">Tipo</span>
-            <button type="button" class="input" id="c_tipo_btn" style="text-align:left" onclick="toggleTipoMenu()">Seleccionar tipo</button>
-            <div id="c_tipo_menu" style="display:none;margin-top:8px;padding:10px;border:1px solid var(--border2);border-radius:8px;background:var(--bg)">
-              <div style="display:flex;gap:10px;flex-wrap:wrap">
-                <label><input type="checkbox" name="c_tipo" value="depto" onchange="refreshTipoLabel()">Depto</label>
-                <label><input type="checkbox" name="c_tipo" value="ph" onchange="refreshTipoLabel()">PH</label>
-                <label><input type="checkbox" name="c_tipo" value="casa" onchange="refreshTipoLabel()">Casa</label>
-                <label><input type="checkbox" name="c_tipo" value="otro" onchange="refreshTipoLabel()">Otro</label>
-              </div>
+      <!-- Listado de clientes (vista principal) -->
+      <div id="clientes-listado">
+        <div class="card">
+          <div class="admin-head" style="margin-bottom:12px">
+            <div>
+              <span class="card-label" style="padding-bottom:0;margin-bottom:0;border-bottom:none">Clientes del agente</span>
+              <p class="note">Listado personal por usuario</p>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <button class="btn btn-ghost" style="padding:8px 12px" onclick="cargarClientes()">Recargar</button>
+              <button class="btn btn-primary" style="padding:8px 14px" onclick="mostrarFormCliente()">+ Nuevo cliente</button>
             </div>
           </div>
-          <div class="field"><span class="field-label">Ambientes</span>
-            <button type="button" class="input" id="c_ambientes_btn" style="text-align:left" onclick="toggleAmbientesMenu()">Seleccionar ambientes</button>
-            <div id="c_ambientes_menu" style="display:none;margin-top:8px;padding:10px;border:1px solid var(--border2);border-radius:8px;background:var(--bg)">
-              <div style="display:flex;gap:10px;flex-wrap:wrap">
-                <label><input type="checkbox" name="c_ambientes" value="1" onchange="refreshAmbientesLabel()">1</label>
-                <label><input type="checkbox" name="c_ambientes" value="2" onchange="refreshAmbientesLabel()">2</label>
-                <label><input type="checkbox" name="c_ambientes" value="3" onchange="refreshAmbientesLabel()">3</label>
-                <label><input type="checkbox" name="c_ambientes" value="4" onchange="refreshAmbientesLabel()">4</label>
-                <label><input type="checkbox" name="c_ambientes" value="5" onchange="refreshAmbientesLabel()">5</label>
-                <label><input type="checkbox" name="c_ambientes" value="6" onchange="refreshAmbientesLabel()">6</label>
-                <label><input type="checkbox" name="c_ambientes" value="7" onchange="refreshAmbientesLabel()">7</label>
-                <label><input type="checkbox" name="c_ambientes" value="8" onchange="refreshAmbientesLabel()">8</label>
-                <label><input type="checkbox" name="c_ambientes" value="9" onchange="refreshAmbientesLabel()">9</label>
-                <label><input type="checkbox" name="c_ambientes" value="10" onchange="refreshAmbientesLabel()">10</label>
-              </div>
-            </div>
+          <div style="overflow-x:auto">
+            <table class="user-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Nombre</th>
+                  <th>Teléfono</th>
+                  <th>Presupuesto</th>
+                  <th>Tipo</th>
+                  <th>Ambientes</th>
+                  <th>Apto crédito</th>
+                  <th>Zonas</th>
+                  <th>Situación</th>
+                  <th>Notas</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="clients-body">
+                <tr><td colspan="11" style="text-align:center;color:var(--muted);padding:24px">Sin datos todavía</td></tr>
+              </tbody>
+            </table>
           </div>
-          <div class="field"><span class="field-label">Apto crédito</span>
-            <select class="input" id="c_apto_credito">
-              <option value="si">Sí</option>
-              <option value="no">No</option>
-            </select>
-          </div>
-        </div>
-        <div class="field-grid one mt-4">
-          <div class="field"><span class="field-label">Zonas de búsqueda</span>
-            <input class="input" id="c_zonas_search" type="text" placeholder="Escribí una zona..." oninput="renderZonasSugeridas(this.value)">
-            <div id="c_zonas_sugeridas" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"></div>
-            <div id="c_zonas_selected" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"></div>
-          </div>
-          <div class="field"><span class="field-label">Situación</span><input class="input" id="c_situacion" type="text" placeholder="Buscando, visita agendada, oferta..."></div>
-          <div class="field"><span class="field-label">Notas resumidas</span><textarea class="input" id="c_notas_resumidas" rows="3" placeholder="Observaciones clave..."></textarea></div>
-        </div>
-        <div class="btn-row mt-4">
-          <button class="btn btn-primary" id="btn-cliente-guardar" onclick="guardarCliente()">Guardar cliente</button>
-          <button class="btn btn-ghost" onclick="limpiarFormularioCliente()">Limpiar</button>
         </div>
       </div>
 
-      <div class="card">
-        <div class="admin-head" style="margin-bottom:12px">
-          <div>
-            <span class="card-label" style="padding-bottom:0;margin-bottom:0;border-bottom:none">Clientes del agente</span>
-            <p class="note">Listado personal por usuario</p>
+      <!-- Formulario de cliente (oculto por defecto) -->
+      <div id="clientes-form" style="display:none">
+        <div class="card" style="margin-bottom:14px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+            <span class="card-label" style="padding-bottom:0;margin-bottom:0;border-bottom:none" id="form-cliente-titulo">Nuevo cliente</span>
+            <button class="btn btn-ghost" style="padding:6px 12px;font-size:12px" onclick="volverListadoClientes()">← Volver al listado</button>
           </div>
-          <button class="btn btn-ghost" style="padding:8px 12px" onclick="cargarClientes()">Recargar</button>
-        </div>
-        <div style="overflow-x:auto">
-          <table class="user-table">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Nombre</th>
-                <th>Teléfono</th>
-                <th>Presupuesto</th>
-                <th>Tipo</th>
-                <th>Ambientes</th>
-                <th>Apto crédito</th>
-                <th>Zonas</th>
-                <th>Situación</th>
-                <th>Notas</th>
-                <th>Acciones</th>
-              </tr>
-            </thead>
-            <tbody id="clients-body">
-              <tr><td colspan="11" style="text-align:center;color:var(--muted);padding:24px">Sin datos todavía</td></tr>
-            </tbody>
-          </table>
+          <div class="field-grid">
+            <div class="field"><span class="field-label">Nombre</span><input class="input" id="c_nombre" type="text" placeholder="Nombre y apellido" oninput="normalizarNombreCliente(this)"></div>
+            <div class="field"><span class="field-label">Teléfono</span><input class="input" id="c_telefono" type="text" inputmode="numeric" placeholder="11..." oninput="normalizarTelefonoCliente(this)"></div>
+            <div class="field"><span class="field-label">Presupuesto</span><input class="input" id="c_presupuesto" type="text" inputmode="numeric" placeholder="100.000" oninput="normalizarPresupuestoCliente(this)"></div>
+            <div class="field"><span class="field-label">Tipo</span>
+              <button type="button" class="input" id="c_tipo_btn" style="text-align:left" onclick="toggleTipoMenu()">Seleccionar tipo</button>
+              <div id="c_tipo_menu" style="display:none;margin-top:8px;padding:10px;border:1px solid var(--border2);border-radius:8px;background:var(--bg)">
+                <div style="display:flex;gap:10px;flex-wrap:wrap">
+                  <label><input type="checkbox" name="c_tipo" value="depto" onchange="refreshTipoLabel()">Depto</label>
+                  <label><input type="checkbox" name="c_tipo" value="ph" onchange="refreshTipoLabel()">PH</label>
+                  <label><input type="checkbox" name="c_tipo" value="casa" onchange="refreshTipoLabel()">Casa</label>
+                  <label><input type="checkbox" name="c_tipo" value="otro" onchange="refreshTipoLabel()">Otro</label>
+                </div>
+              </div>
+            </div>
+            <div class="field"><span class="field-label">Ambientes</span>
+              <button type="button" class="input" id="c_ambientes_btn" style="text-align:left" onclick="toggleAmbientesMenu()">Seleccionar ambientes</button>
+              <div id="c_ambientes_menu" style="display:none;margin-top:8px;padding:10px;border:1px solid var(--border2);border-radius:8px;background:var(--bg)">
+                <div style="display:flex;gap:10px;flex-wrap:wrap">
+                  <label><input type="checkbox" name="c_ambientes" value="1" onchange="refreshAmbientesLabel()">1</label>
+                  <label><input type="checkbox" name="c_ambientes" value="2" onchange="refreshAmbientesLabel()">2</label>
+                  <label><input type="checkbox" name="c_ambientes" value="3" onchange="refreshAmbientesLabel()">3</label>
+                  <label><input type="checkbox" name="c_ambientes" value="4" onchange="refreshAmbientesLabel()">4</label>
+                  <label><input type="checkbox" name="c_ambientes" value="5" onchange="refreshAmbientesLabel()">5</label>
+                  <label><input type="checkbox" name="c_ambientes" value="6" onchange="refreshAmbientesLabel()">6</label>
+                  <label><input type="checkbox" name="c_ambientes" value="7" onchange="refreshAmbientesLabel()">7</label>
+                  <label><input type="checkbox" name="c_ambientes" value="8" onchange="refreshAmbientesLabel()">8</label>
+                  <label><input type="checkbox" name="c_ambientes" value="9" onchange="refreshAmbientesLabel()">9</label>
+                  <label><input type="checkbox" name="c_ambientes" value="10" onchange="refreshAmbientesLabel()">10</label>
+                </div>
+              </div>
+            </div>
+            <div class="field"><span class="field-label">Apto crédito</span>
+              <select class="input" id="c_apto_credito">
+                <option value="si">Sí</option>
+                <option value="no">No</option>
+              </select>
+            </div>
+          </div>
+          <div class="field-grid one mt-4">
+            <div class="field"><span class="field-label">Zonas de búsqueda</span>
+              <input class="input" id="c_zonas_search" type="text" placeholder="Escribí una zona..." oninput="renderZonasSugeridas(this.value)">
+              <div id="c_zonas_sugeridas" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"></div>
+              <div id="c_zonas_selected" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"></div>
+            </div>
+            <div class="field"><span class="field-label">Situación</span><input class="input" id="c_situacion" type="text" placeholder="Buscando, visita agendada, oferta..."></div>
+            <div class="field"><span class="field-label">Notas resumidas</span><textarea class="input" id="c_notas_resumidas" rows="3" placeholder="Observaciones clave..."></textarea></div>
+          </div>
+          <div class="btn-row mt-4">
+            <button class="btn btn-primary" id="btn-cliente-guardar" onclick="guardarCliente()">Guardar cliente</button>
+            <button class="btn btn-ghost" onclick="limpiarFormularioCliente()">Limpiar</button>
+          </div>
         </div>
       </div>
     </div>
@@ -929,8 +938,29 @@ function abrirWpp() {
   window.open(`https://web.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
 }
 
+/* ── Portales dinámicos ───────────── */
+async function cargarPortales() {
+  const sel = document.getElementById('portal-filter');
+  if (!sel) return;
+  const prev = sel.value;
+  try {
+    const res = await fetch('/api/portales');
+    if (!res.ok) return;
+    const portals = await res.json();
+    sel.innerHTML = '<option value="">Todos los portales</option>';
+    portals.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p;
+      opt.textContent = p.charAt(0).toUpperCase() + p.slice(1);
+      sel.appendChild(opt);
+    });
+    if (prev && portals.includes(prev)) sel.value = prev;
+  } catch (e) { /* silent */ }
+}
+
 /* ── Propiedades activas ───────────── */
 async function cargarPropiedadesActivas() {
+  cargarPortales();
   const tbody = document.getElementById('properties-body');
   if (!tbody) return;
   try {
@@ -981,6 +1011,20 @@ async function eliminarPropiedad(id) {
   } catch (e) {
     toast('Error de red al eliminar', 'err');
   }
+}
+
+/* ── Clientes: navegación ─────────── */
+function mostrarFormCliente() {
+  limpiarFormularioCliente();
+  document.getElementById('form-cliente-titulo').textContent = 'Nuevo cliente';
+  document.getElementById('clientes-listado').style.display = 'none';
+  document.getElementById('clientes-form').style.display = 'block';
+}
+
+function volverListadoClientes() {
+  document.getElementById('clientes-form').style.display = 'none';
+  document.getElementById('clientes-listado').style.display = 'block';
+  limpiarFormularioCliente();
 }
 
 /* ── Clientes ─────────────────────── */
@@ -1116,6 +1160,7 @@ async function guardarCliente() {
     toast(editingClientId ? 'Cliente actualizado' : 'Cliente creado');
     limpiarFormularioCliente();
     cargarClientes();
+    volverListadoClientes();
   } else {
     const d = await res.json().catch(() => ({}));
     toast(d.error || 'Error al guardar cliente', 'err');
@@ -1163,6 +1208,7 @@ function editarCliente(idx) {
   if (!c) return;
   editingClientId = c.id;
   document.getElementById('btn-cliente-guardar').textContent = 'Actualizar cliente';
+  document.getElementById('form-cliente-titulo').textContent = 'Editar cliente';
   document.getElementById('c_nombre').value = c.nombre || '';
   document.getElementById('c_telefono').value = c.telefono || '';
   document.getElementById('c_presupuesto').value = c.presupuesto || '';
@@ -1179,7 +1225,8 @@ function editarCliente(idx) {
   renderZonasSugeridas(document.getElementById('c_zonas_search')?.value || '');
   document.getElementById('c_notas_resumidas').value = c.notas_resumidas || '';
   document.getElementById('c_situacion').value = c.situacion || '';
-  showPanel('clientes');
+  document.getElementById('clientes-listado').style.display = 'none';
+  document.getElementById('clientes-form').style.display = 'block';
 }
 
 async function eliminarCliente(id) {
