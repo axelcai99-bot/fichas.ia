@@ -525,11 +525,16 @@ def property_detail(property_id: int):
         sep = "&" if "?" in form_url else "?"
         survey_url = f"{form_url}{sep}entry.0={urllib.parse.quote(prop.get('ubicacion') or prop.get('titulo') or '')}"
 
+    detalles = prop.get("detalles", {}) or {}
+    caracteristicas_extra = [f for f in merged_features if not _is_detail_feature(f)]
+
     return render_template(
         "property_detail.html",
         prop=prop,
         images=images,
+        detalles=detalles,
         merged_features=merged_features[:10],
+        caracteristicas_extra=caracteristicas_extra[:12],
         descripcion_parts=descripcion_parts,
         wa_msg=wa_msg,
         survey_url=survey_url,
@@ -794,6 +799,12 @@ def interests_by_property(property_id: int):
          "telefono": r["telefono"]}
         for r in rows
     ])
+
+
+def _is_detail_feature(feature: str) -> bool:
+    """Return True if this feature string came from the structured detalles dict."""
+    low = feature.lower()
+    return bool(re.search(r"m²\s*(tot|cub)", low) or re.search(r"\b(amb|baños|dorm)\.", low))
 
 
 def _merge_features(caracteristicas: list[str], detalles: dict) -> list[str]:
