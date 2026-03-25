@@ -1118,6 +1118,8 @@ class ScraperService:
     def _clean_description(text: str) -> str:
         if not text:
             return ""
+        # Eliminar línea de corredor inmobiliario responsable al inicio
+        text = re.sub(r"^Corredor Inmobiliario responsable:.*?\n", "", text, flags=re.I)
         text = re.sub(r"\bVer datos\b\.?", "", text, flags=re.I)
         text = re.sub(r"\bLEPORE SAN CRISTOBAL\b.*$", "", text, flags=re.I | re.S)
         text = re.sub(r"\bLEPORE PROPIEDADES\b.*$", "", text, flags=re.I | re.S)
