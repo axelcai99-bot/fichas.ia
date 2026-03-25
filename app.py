@@ -508,10 +508,8 @@ def property_detail(property_id: int):
 
     if not images:
         placeholder = PropertyService._placeholder_svg_url()
-        images = [placeholder] * 5
+        images = [placeholder]
     images = [_build_image_src(image, prop.get("source_url", "")) for image in images]
-    while len(images) < 5:
-        images.append(images[-1])
 
     merged_features = _merge_features(prop.get("caracteristicas", []), prop.get("detalles", {}))
     descripcion = prop.get("descripcion", "") or ""

@@ -12,29 +12,27 @@ body{font-family:'Inter',sans-serif;background:#f5f5f5;color:#404041;-webkit-fon
 .card{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
 .gp{background:linear-gradient(135deg,#003DA5,#DC1C2E);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
 
-/* Carousel */
-.carousel{position:relative;border-radius:14px;overflow:hidden;background:#111;margin-bottom:20px}
-.carousel-track{display:flex;transition:transform .3s ease}
-.carousel-slide{min-width:100%;flex-shrink:0;display:flex;align-items:center;justify-content:center;max-height:380px}
-.carousel-slide img{width:100%;height:380px;object-fit:contain;display:block;background:#111}
-.carousel-btn{position:absolute;top:50%;transform:translateY(-50%);width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.85);border:none;cursor:pointer;font-size:22px;color:#333;display:flex;align-items:center;justify-content:center;z-index:10;box-shadow:0 2px 8px rgba(0,0,0,.15);transition:background .2s}
-.carousel-btn:hover{background:#fff}
-.carousel-btn.prev{left:12px}
-.carousel-btn.next{right:12px}
-.carousel-dots{display:flex;justify-content:center;gap:6px;padding:12px 0}
-.carousel-dot{width:8px;height:8px;border-radius:50%;background:#d0d0d0;border:none;cursor:pointer;transition:background .2s}
-.carousel-dot.active{background:#003DA5}
-.carousel-counter{position:absolute;bottom:12px;right:14px;background:rgba(0,0,0,.55);color:#fff;font-size:13px;font-weight:600;padding:4px 12px;border-radius:16px;z-index:10}
+/* ── Gallery Grid ─────────────────────────────── */
+.gallery-wrap{position:relative;margin-bottom:20px}
+.gallery-grid{display:grid;grid-template-columns:3fr 2fr;grid-template-rows:210px 210px;gap:4px;border-radius:14px;overflow:hidden;height:424px}
+.gallery-main{grid-column:1;grid-row:1/3;position:relative;overflow:hidden;cursor:pointer;background:#ddd}
+.gallery-main img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .35s}
+.gallery-main:hover img{transform:scale(1.03)}
+.gallery-smalls{grid-column:2;grid-row:1/3;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:4px}
+.gallery-small{position:relative;overflow:hidden;cursor:pointer;background:#ddd}
+.gallery-small img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .35s}
+.gallery-small:hover img{transform:scale(1.06)}
+.gallery-small-empty{background:#e8e8e8;cursor:default}
+.gallery-more-overlay{position:absolute;inset:0;background:rgba(0,0,0,.48);display:flex;align-items:center;justify-content:center;color:#fff;font-size:17px;font-weight:700;letter-spacing:.01em;pointer-events:none}
+.gallery-btn-all{position:absolute;bottom:14px;right:14px;background:rgba(255,255,255,.95);border:1.5px solid #ccc;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;color:#333;cursor:pointer;transition:background .2s,box-shadow .2s;box-shadow:0 2px 6px rgba(0,0,0,.12);font-family:inherit}
+.gallery-btn-all:hover{background:#fff;box-shadow:0 3px 10px rgba(0,0,0,.18)}
+@media(max-width:640px){
+  .gallery-grid{grid-template-columns:1fr;grid-template-rows:260px;height:260px}
+  .gallery-main{grid-row:1}
+  .gallery-smalls{display:none}
+}
 
-/* Thumbnail strip */
-.thumbs{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;scrollbar-width:thin;margin-bottom:20px}
-.thumbs::-webkit-scrollbar{height:4px}
-.thumbs::-webkit-scrollbar-thumb{background:#ddd;border-radius:4px}
-.thumb{width:72px;height:52px;border-radius:6px;object-fit:cover;cursor:pointer;border:2px solid transparent;flex-shrink:0;transition:border-color .2s,opacity .2s;opacity:.6}
-.thumb.active{border-color:#003DA5;opacity:1}
-.thumb:hover{opacity:1}
-
-/* Layout */
+/* ── Layout ──────────────────────────────────── */
 .layout{display:grid;grid-template-columns:2fr 1fr;gap:20px;align-items:start}
 @media(max-width:768px){
   .layout{display:block}
@@ -42,33 +40,41 @@ body{font-family:'Inter',sans-serif;background:#f5f5f5;color:#404041;-webkit-fon
   .details-grid{grid-template-columns:repeat(2,1fr)!important}
 }
 
-/* Details grid */
+/* ── Details grid ─────────────────────────────── */
 .details-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;text-align:center}
 .detail-item{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 4px}
 .detail-icon{width:32px;height:32px;color:#003DA5}
 .detail-icon svg{width:32px;height:32px}
 .detail-label{font-size:13px;font-weight:600;color:#333;line-height:1.3}
 
-/* Features list */
+/* ── Features list ────────────────────────────── */
 .features-list{display:flex;flex-wrap:wrap;gap:10px}
 .feature-tag{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;background:#f0f4ff;border:1px solid #dde4f0;border-radius:8px;font-size:13px;font-weight:500;color:#1A3668}
 .feature-tag svg{width:16px;height:16px;color:#003DA5;flex-shrink:0}
 
-/* Description */
+/* ── Description ──────────────────────────────── */
 .desc-text{font-size:14px;color:#505050;line-height:1.75;position:relative;overflow:hidden}
 .desc-text.collapsed{max-height:200px}
 .desc-toggle{display:inline-block;margin-top:8px;font-size:13px;font-weight:600;color:#003DA5;cursor:pointer;border:none;background:none;padding:0}
 .desc-toggle:hover{text-decoration:underline}
 
-/* Fullscreen modal */
-.modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.93);z-index:9999;overflow:hidden}
-.modal.open{display:flex;align-items:center;justify-content:center}
-.modal-close{position:fixed;top:16px;right:20px;background:none;border:none;color:white;font-size:36px;cursor:pointer;z-index:10001}
-.modal-nav{position:fixed;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.15);border:none;color:white;font-size:28px;width:48px;height:48px;border-radius:50%;cursor:pointer;z-index:10001;backdrop-filter:blur(4px)}
+/* ── Fullscreen Modal ─────────────────────────── */
+.modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:9999;flex-direction:column;align-items:center;justify-content:center}
+.modal.open{display:flex}
+.modal-close{position:fixed;top:16px;right:20px;background:rgba(255,255,255,.12);border:none;color:white;font-size:28px;width:44px;height:44px;border-radius:50%;cursor:pointer;z-index:10001;display:flex;align-items:center;justify-content:center;transition:background .2s;backdrop-filter:blur(4px)}
+.modal-close:hover{background:rgba(255,255,255,.22)}
+.modal-nav{position:fixed;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.14);border:none;color:white;font-size:32px;width:52px;height:52px;border-radius:50%;cursor:pointer;z-index:10001;backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;transition:background .2s;line-height:1}
+.modal-nav:hover{background:rgba(255,255,255,.26)}
 .modal-nav.prev{left:16px}
 .modal-nav.next{right:16px}
-#modal-img{max-width:90vw;max-height:85vh;object-fit:contain;border-radius:8px}
-#photo-counter{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);color:white;font-size:14px;font-weight:600;background:rgba(0,0,0,.5);padding:6px 16px;border-radius:20px;z-index:10001}
+.modal-img-wrap{display:flex;align-items:center;justify-content:center;width:100%;max-height:82vh;padding:0 80px}
+#modal-img{max-width:100%;max-height:82vh;object-fit:contain;border-radius:8px;display:block}
+.modal-counter{color:rgba(255,255,255,.85);font-size:14px;font-weight:600;margin-top:16px;letter-spacing:.04em}
+.modal-strip{display:flex;gap:6px;margin-top:14px;overflow-x:auto;max-width:90vw;padding:0 4px 4px;scrollbar-width:none}
+.modal-strip::-webkit-scrollbar{display:none}
+.modal-thumb{width:64px;height:46px;border-radius:5px;object-fit:cover;cursor:pointer;opacity:.5;border:2px solid transparent;flex-shrink:0;transition:opacity .2s,border-color .2s}
+.modal-thumb.active{opacity:1;border-color:#fff}
+.modal-thumb:hover{opacity:.85}
 </style>
 </head>
 <body>
@@ -80,25 +86,36 @@ body{font-family:'Inter',sans-serif;background:#f5f5f5;color:#404041;-webkit-fon
     <p class="gp" style="font-size:clamp(22px,4vw,30px);font-weight:800">{{ prop.precio }}</p>
   </div>
 
-  <!-- Carousel -->
-  <div class="carousel" id="carousel">
-    <div class="carousel-track" id="carousel-track">
-      {% for image in images %}
-      <div class="carousel-slide">
-        <img src="{{ image }}" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22400%22 height=%22300%22><rect fill=%22%23eee%22 width=%22400%22 height=%22300%22/></svg>'" alt="Foto {{ loop.index }}" onclick="openModal({{ loop.index0 }})">
+  <!-- Gallery Grid: 1 large + 4 small -->
+  <div class="gallery-wrap">
+    <div class="gallery-grid">
+      <!-- Main large photo -->
+      <div class="gallery-main" onclick="openModal(0)">
+        {% if images %}
+        <img src="{{ images[0] }}" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22400%22 height=%22300%22><rect fill=%22%23ddd%22 width=%22400%22 height=%22300%22/></svg>'" alt="Foto 1">
+        {% endif %}
       </div>
-      {% endfor %}
+      <!-- 2×2 small photos -->
+      <div class="gallery-smalls">
+        {% for i in range(1, 5) %}
+        {% if i < images|length %}
+        <div class="gallery-small" onclick="openModal({{ i }})">
+          <img src="{{ images[i] }}" onerror="this.parentElement.style.background='#e0e0e0';this.remove()" alt="Foto {{ i+1 }}">
+          {% if i == 4 and images|length > 5 %}
+          <div class="gallery-more-overlay">+{{ images|length - 5 }} fotos</div>
+          {% endif %}
+        </div>
+        {% else %}
+        <div class="gallery-small gallery-small-empty"></div>
+        {% endif %}
+        {% endfor %}
+      </div>
     </div>
-    <button class="carousel-btn prev" id="car-prev" onclick="carouselNav(-1)">&#8249;</button>
-    <button class="carousel-btn next" id="car-next" onclick="carouselNav(1)">&#8250;</button>
-    <div class="carousel-counter" id="car-counter"></div>
-  </div>
-
-  <!-- Thumbnails -->
-  <div class="thumbs" id="thumbs">
-    {% for image in images %}
-    <img class="thumb{% if loop.index0 == 0 %} active{% endif %}" src="{{ image }}" onclick="carouselGo({{ loop.index0 }})" onerror="this.style.display='none'" alt="thumb {{ loop.index }}">
-    {% endfor %}
+    {% if images|length > 1 %}
+    <button class="gallery-btn-all" onclick="openModal(0)">
+      &#9632;&nbsp; Ver todas las fotos ({{ images|length }})
+    </button>
+    {% endif %}
   </div>
 
   <!-- Main Layout: 2fr / 1fr -->
@@ -231,42 +248,37 @@ body{font-family:'Inter',sans-serif;background:#f5f5f5;color:#404041;-webkit-fon
 </div>
 
 <!-- Fullscreen Modal -->
-<div id="modal" class="modal" onclick="if(event.target===this)closeModal()">
-  <button class="modal-close" onclick="closeModal()">&times;</button>
+<div id="modal" class="modal" onclick="if(event.target===this||event.target.id==='modal')closeModal()">
+  <button class="modal-close" onclick="closeModal()" title="Cerrar">&times;</button>
   <button class="modal-nav prev" id="btn-prev" onclick="event.stopPropagation();modalNav(-1)">&#8249;</button>
   <button class="modal-nav next" id="btn-next" onclick="event.stopPropagation();modalNav(1)">&#8250;</button>
-  <img id="modal-img" onclick="event.stopPropagation()" src="" alt="Foto">
-  <div id="photo-counter"></div>
+  <div class="modal-img-wrap" onclick="event.stopPropagation()">
+    <img id="modal-img" src="" alt="Foto">
+  </div>
+  <div class="modal-counter" id="photo-counter"></div>
+  <div class="modal-strip" id="modal-strip" onclick="event.stopPropagation()"></div>
 </div>
 
 <script>
 var IMAGES = {{ images|tojson }};
-var carIdx = 0;
 var modalIdx = 0;
 var total = IMAGES.length;
 
-/* ---- Inline Carousel ---- */
-function carouselUpdate(){
-  document.getElementById('carousel-track').style.transform = 'translateX(-'+carIdx*100+'%)';
-  document.getElementById('car-counter').textContent = (carIdx+1)+' / '+total;
-  document.getElementById('car-prev').style.visibility = carIdx > 0 ? 'visible' : 'hidden';
-  document.getElementById('car-next').style.visibility = carIdx < total-1 ? 'visible' : 'hidden';
-  // Update thumbnails
-  var thumbs = document.querySelectorAll('.thumb');
-  thumbs.forEach(function(t,i){ t.classList.toggle('active', i===carIdx); });
-  // Scroll active thumb into view
-  if(thumbs[carIdx]) thumbs[carIdx].scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'});
-}
-function carouselNav(dir){
-  var next = carIdx + dir;
-  if(next >= 0 && next < total){ carIdx = next; carouselUpdate(); }
-}
-function carouselGo(i){
-  carIdx = i; carouselUpdate();
-}
-carouselUpdate();
+/* ── Build modal thumbnail strip ── */
+(function(){
+  var strip = document.getElementById('modal-strip');
+  IMAGES.forEach(function(src, i){
+    var img = document.createElement('img');
+    img.src = src;
+    img.className = 'modal-thumb' + (i===0?' active':'');
+    img.alt = 'Foto '+(i+1);
+    img.onerror = function(){ this.style.display='none'; };
+    img.onclick = function(){ openModal(i); };
+    strip.appendChild(img);
+  });
+})();
 
-/* ---- Fullscreen Modal ---- */
+/* ── Modal ── */
 function openModal(i){
   modalIdx = i;
   updateModal();
@@ -275,9 +287,13 @@ function openModal(i){
 }
 function updateModal(){
   document.getElementById('modal-img').src = IMAGES[modalIdx] || '';
-  document.getElementById('photo-counter').textContent = (modalIdx+1)+' / '+total;
+  document.getElementById('photo-counter').textContent = (modalIdx+1) + ' / ' + total;
   document.getElementById('btn-prev').style.visibility = modalIdx > 0 ? 'visible' : 'hidden';
   document.getElementById('btn-next').style.visibility = modalIdx < total-1 ? 'visible' : 'hidden';
+  /* sync thumbnail strip */
+  var thumbs = document.querySelectorAll('.modal-thumb');
+  thumbs.forEach(function(t,i){ t.classList.toggle('active', i===modalIdx); });
+  if(thumbs[modalIdx]) thumbs[modalIdx].scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'});
 }
 function modalNav(dir){
   var next = modalIdx + dir;
@@ -288,7 +304,26 @@ function closeModal(){
   document.body.style.overflow = '';
 }
 
-/* ---- Description toggle ---- */
+/* ── Keyboard ── */
+document.addEventListener('keydown', function(e){
+  if(!document.getElementById('modal').classList.contains('open')) return;
+  if(e.key==='Escape') closeModal();
+  if(e.key==='ArrowLeft') modalNav(-1);
+  if(e.key==='ArrowRight') modalNav(1);
+});
+
+/* ── Touch swipe en modal ── */
+(function(){
+  var modal = document.getElementById('modal');
+  var startX = 0;
+  modal.addEventListener('touchstart', function(e){ startX = e.touches[0].clientX; }, {passive:true});
+  modal.addEventListener('touchend', function(e){
+    var diff = startX - e.changedTouches[0].clientX;
+    if(Math.abs(diff) > 50) modalNav(diff > 0 ? 1 : -1);
+  });
+})();
+
+/* ── Description toggle ── */
 function toggleDesc(){
   var el = document.getElementById('desc-text');
   var btn = document.getElementById('desc-toggle');
@@ -300,35 +335,10 @@ function toggleDesc(){
     btn.textContent = 'Mostrar más';
   }
 }
-// Hide toggle if description is short
 (function(){
   var el = document.getElementById('desc-text');
   var btn = document.getElementById('desc-toggle');
-  if(el && el.scrollHeight <= 200){ btn.style.display = 'none'; el.classList.remove('collapsed'); }
-})();
-
-/* ---- Keyboard nav ---- */
-document.addEventListener('keydown', function(e){
-  var modal = document.getElementById('modal');
-  if(modal.classList.contains('open')){
-    if(e.key==='Escape') closeModal();
-    if(e.key==='ArrowLeft') modalNav(-1);
-    if(e.key==='ArrowRight') modalNav(1);
-  } else {
-    if(e.key==='ArrowLeft') carouselNav(-1);
-    if(e.key==='ArrowRight') carouselNav(1);
-  }
-});
-
-/* ---- Touch swipe for carousel ---- */
-(function(){
-  var track = document.getElementById('carousel');
-  var startX = 0;
-  track.addEventListener('touchstart', function(e){ startX = e.touches[0].clientX; });
-  track.addEventListener('touchend', function(e){
-    var diff = startX - e.changedTouches[0].clientX;
-    if(Math.abs(diff) > 50){ carouselNav(diff > 0 ? 1 : -1); }
-  });
+  if(el && el.scrollHeight <= 200){ btn.style.display='none'; el.classList.remove('collapsed'); }
 })();
 </script>
 </body>
