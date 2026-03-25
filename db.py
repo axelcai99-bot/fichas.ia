@@ -110,6 +110,37 @@ def init_db() -> None:
             ON clients(updated_at DESC)
             """
         )
+
+        # Soft-delete columns
+        _ensure_column(conn, "properties", "deleted_at", "TEXT")
+        _ensure_column(conn, "clients", "deleted_at", "TEXT")
+
+        # Client-Property interests
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS client_property_interests (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                client_id INTEGER NOT NULL,
+                property_id INTEGER NOT NULL,
+                owner_username TEXT NOT NULL,
+                nota TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                UNIQUE(client_id, property_id)
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_cpi_client
+            ON client_property_interests(client_id)
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_cpi_property
+            ON client_property_interests(property_id)
+            """
+        )
         conn.commit()
 
     _bootstrap_users()
@@ -181,6 +212,12 @@ def _mark_users_json_migrated() -> None:
         # Si no se puede renombrar (permisos/bloqueo), se deja el archivo original.
         # La tabla users ya no vacia evita reimportaciones en arranques siguientes.
         pass
+
+
+def _ensure_column(conn: sqlite3.Connection, table: str, column: str, col_type: str) -> None:
+    cols = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    if column not in {c["name"] for c in cols}:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
 
 
 def _ensure_properties_owner_column(conn: sqlite3.Connection) -> None:

@@ -432,6 +432,9 @@ body {
     <button class="nav-btn" onclick="showPanel('clientes', this); cargarClientes()">
       <span class="nav-icon">🗂️</span> Clientes
     </button>
+    <button class="nav-btn" onclick="showPanel('papelera', this); cargarPapelera()">
+      <span class="nav-icon">🗑️</span> Papelera
+    </button>
     <button class="nav-btn" onclick="showPanel('perfil', this)">
       <span class="nav-icon">⚙️</span> Mi perfil
     </button>
@@ -558,6 +561,7 @@ body {
             </tbody>
           </table>
         </div>
+        <div id="prop-pagination" style="display:flex;align-items:center;gap:8px;justify-content:center;margin-top:12px"></div>
       </div>
     </div>
 
@@ -571,7 +575,8 @@ body {
               <span class="card-label" style="padding-bottom:0;margin-bottom:0;border-bottom:none">Clientes del agente</span>
               <p class="note">Listado personal por usuario</p>
             </div>
-            <div style="display:flex;gap:8px;align-items:center">
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <input class="input" id="client-search" type="text" placeholder="Buscar por nombre, zona, tipo..." style="min-width:200px;padding:8px 10px" oninput="clientSearchDebounce()">
               <button class="btn btn-ghost" style="padding:8px 12px" onclick="cargarClientes()">Recargar</button>
               <button class="btn btn-primary" style="padding:8px 14px" onclick="mostrarFormCliente()">+ Nuevo cliente</button>
             </div>
@@ -598,6 +603,7 @@ body {
               </tbody>
             </table>
           </div>
+          <div id="client-pagination" style="display:flex;align-items:center;gap:8px;justify-content:center;margin-top:12px"></div>
         </div>
       </div>
 
@@ -660,6 +666,32 @@ body {
             <button class="btn btn-primary" id="btn-cliente-guardar" onclick="guardarCliente()">Guardar cliente</button>
             <button class="btn btn-ghost" onclick="limpiarFormularioCliente()">Limpiar</button>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── PAPELERA ────────────────────────────────────── -->
+    <div class="panel" id="panel-papelera">
+      <div class="card" style="margin-bottom:14px">
+        <span class="card-label">Propiedades eliminadas</span>
+        <div style="overflow-x:auto">
+          <table class="user-table">
+            <thead><tr><th>Propiedad</th><th>Portal</th><th>Precio</th><th>Eliminada</th><th>Acciones</th></tr></thead>
+            <tbody id="trash-props-body">
+              <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px">Sin elementos</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <span class="card-label">Clientes eliminados</span>
+        <div style="overflow-x:auto">
+          <table class="user-table">
+            <thead><tr><th>Nombre</th><th>Teléfono</th><th>Tipo</th><th>Zonas</th><th>Acciones</th></tr></thead>
+            <tbody id="trash-clients-body">
+              <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px">Sin elementos</td></tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -786,16 +818,23 @@ body {
 <div class="toast" id="toast"></div>
 
 <script>
+const CSRF_TOKEN = {{ csrf_token()|tojson }};
+function csrfHeaders(extra) {
+  return Object.assign({'Content-Type':'application/json', 'X-CSRF-Token': CSRF_TOKEN}, extra || {});
+}
 let currentUrl = null;
 let resetTarget = null;
 let editingClientId = null;
 let CLIENTS_CACHE = [];
+let propPage = 1, propTotal = 0, propPerPage = 20;
+let clientPage = 1, clientTotal = 0, clientPerPage = 50;
 const CURRENT_USERNAME = {{ username|tojson }};
 
 const PANELS = {
   generar:  ['Generador de Fichas',  'Pegá el link y en minutos tenés la ficha lista'],
   propiedades: ['Propiedades activas', 'Listado de fichas generadas en local'],
   clientes: ['Clientes', 'Agenda y seguimiento comercial'],
+  papelera: ['Papelera', 'Elementos eliminados recientemente'],
   perfil:   ['Mi Perfil',            'Configurá tus datos de contacto'],
   pass:     ['Contraseña',           'Actualizá tu contraseña de acceso'],
   usuarios: ['Usuarios',             'Gestioná las cuentas de tus agentes'],
@@ -861,7 +900,7 @@ async function generarFicha() {
   try {
     const res = await fetch('/api/generar', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: csrfHeaders(),
       body: JSON.stringify({
         url,
         nombre:   document.getElementById('g_nombre').value.trim(),
@@ -959,27 +998,33 @@ async function cargarPortales() {
 }
 
 /* ── Propiedades activas ───────────── */
-async function cargarPropiedadesActivas() {
+async function cargarPropiedadesActivas(page) {
+  if (page !== undefined) propPage = page;
   cargarPortales();
   const tbody = document.getElementById('properties-body');
   if (!tbody) return;
   try {
     const portal = document.getElementById('portal-filter')?.value || '';
-    const q = portal ? `?portal=${encodeURIComponent(portal)}` : '';
+    let q = `?page=${propPage}&per_page=${propPerPage}`;
+    if (portal) q += `&portal=${encodeURIComponent(portal)}`;
     const res = await fetch('/propiedades' + q);
     if (!res.ok) throw new Error('error');
-    const props = await res.json();
+    const data = await res.json();
+    const props = data.items || [];
+    propTotal = data.total || 0;
     if (!props.length) {
       tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:24px">No hay propiedades activas todavía</td></tr>';
+      renderPropPagination();
       return;
     }
+    const startNum = propTotal - ((propPage - 1) * propPerPage);
     tbody.innerHTML = props.map((p, idx) => {
       const date = new Date(p.created_at);
       const dateLabel = isNaN(date.getTime()) ? '-' : date.toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' });
       const portal = p.source_portal || '-';
       return `
         <tr>
-          <td>${props.length - idx}</td>
+          <td>${startNum - idx}</td>
           <td><a href="/propiedad/${p.id}" target="_blank" style="color:#7fa0e8;text-decoration:none">${p.titulo || 'Sin título'}</a></td>
           <td style="text-transform:capitalize">${portal}</td>
           <td>${p.precio || '-'}</td>
@@ -991,26 +1036,46 @@ async function cargarPropiedadesActivas() {
         </tr>
       `;
     }).join('');
+    renderPropPagination();
   } catch (e) {
     tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:24px">No se pudo cargar la lista</td></tr>';
   }
 }
 
+function renderPropPagination() {
+  const box = document.getElementById('prop-pagination');
+  if (!box) return;
+  const totalPages = Math.ceil(propTotal / propPerPage);
+  if (totalPages <= 1) { box.innerHTML = ''; return; }
+  let html = `<span style="font-size:12px;color:var(--muted)">${propTotal} propiedades</span> `;
+  if (propPage > 1) html += `<button class="btn btn-ghost" style="padding:4px 10px;font-size:12px" onclick="cargarPropiedadesActivas(${propPage-1})">← Ant</button> `;
+  html += `<span style="font-size:12px;color:var(--text)">${propPage} / ${totalPages}</span> `;
+  if (propPage < totalPages) html += `<button class="btn btn-ghost" style="padding:4px 10px;font-size:12px" onclick="cargarPropiedadesActivas(${propPage+1})">Sig →</button>`;
+  box.innerHTML = html;
+}
+
 async function eliminarPropiedad(id) {
-  const ok = confirm('¿Eliminar esta propiedad? Esta acción no se puede deshacer.');
+  const ok = confirm('¿Mover esta propiedad a la papelera?');
   if (!ok) return;
   try {
-    const res = await fetch(`/api/propiedades/${id}`, { method: 'DELETE' });
+    const res = await fetch(`/api/propiedades/${id}`, { method: 'DELETE', headers: csrfHeaders() });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       toast(data.error || 'No se pudo borrar la propiedad', 'err');
       return;
     }
-    toast('Propiedad eliminada');
+    toast('Propiedad movida a papelera');
     cargarPropiedadesActivas();
   } catch (e) {
     toast('Error de red al eliminar', 'err');
   }
+}
+
+/* ── Clientes: búsqueda ──────────── */
+let _clientSearchTimer = null;
+function clientSearchDebounce() {
+  clearTimeout(_clientSearchTimer);
+  _clientSearchTimer = setTimeout(() => { clientPage = 1; cargarClientes(); }, 350);
 }
 
 /* ── Clientes: navegación ─────────── */
@@ -1153,7 +1218,7 @@ async function guardarCliente() {
   const method = editingClientId ? 'PUT' : 'POST';
   const res = await fetch(url, {
     method,
-    headers: {'Content-Type':'application/json'},
+    headers: csrfHeaders(),
     body: JSON.stringify(payload),
   });
   if (res.ok) {
@@ -1167,18 +1232,25 @@ async function guardarCliente() {
   }
 }
 
-async function cargarClientes() {
+async function cargarClientes(page) {
+  if (page !== undefined) clientPage = page;
   const tbody = document.getElementById('clients-body');
   if (!tbody) return;
-  const res = await fetch('/api/clientes');
+  const searchVal = document.getElementById('client-search')?.value?.trim() || '';
+  let q = `?page=${clientPage}&per_page=${clientPerPage}`;
+  if (searchVal) q += `&q=${encodeURIComponent(searchVal)}`;
+  const res = await fetch('/api/clientes' + q);
   if (!res.ok) {
     tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:24px">No se pudo cargar</td></tr>';
     return;
   }
-  const clients = await res.json();
-  CLIENTS_CACHE = Array.isArray(clients) ? clients : [];
+  const data = await res.json();
+  const clients = data.items || [];
+  clientTotal = data.total || 0;
+  CLIENTS_CACHE = clients;
   if (!CLIENTS_CACHE.length) {
     tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:24px">Sin clientes todavía</td></tr>';
+    renderClientPagination();
     return;
   }
   tbody.innerHTML = CLIENTS_CACHE.map((c, idx) => `
@@ -1201,6 +1273,19 @@ async function cargarClientes() {
       </td>
     </tr>
   `).join('');
+  renderClientPagination();
+}
+
+function renderClientPagination() {
+  const box = document.getElementById('client-pagination');
+  if (!box) return;
+  const totalPages = Math.ceil(clientTotal / clientPerPage);
+  if (totalPages <= 1) { box.innerHTML = `<span style="font-size:12px;color:var(--muted)">${clientTotal} clientes</span>`; return; }
+  let html = `<span style="font-size:12px;color:var(--muted)">${clientTotal} clientes</span> `;
+  if (clientPage > 1) html += `<button class="btn btn-ghost" style="padding:4px 10px;font-size:12px" onclick="cargarClientes(${clientPage-1})">← Ant</button> `;
+  html += `<span style="font-size:12px;color:var(--text)">${clientPage} / ${totalPages}</span> `;
+  if (clientPage < totalPages) html += `<button class="btn btn-ghost" style="padding:4px 10px;font-size:12px" onclick="cargarClientes(${clientPage+1})">Sig →</button>`;
+  box.innerHTML = html;
 }
 
 function editarCliente(idx) {
@@ -1230,16 +1315,71 @@ function editarCliente(idx) {
 }
 
 async function eliminarCliente(id) {
-  if (!confirm('¿Eliminar cliente?')) return;
-  const res = await fetch(`/api/clientes/${id}`, { method: 'DELETE' });
+  if (!confirm('¿Mover cliente a papelera?')) return;
+  const res = await fetch(`/api/clientes/${id}`, { method: 'DELETE', headers: csrfHeaders() });
   if (res.ok) {
-    toast('Cliente eliminado');
+    toast('Cliente movido a papelera');
     if (editingClientId === id) limpiarFormularioCliente();
     cargarClientes();
   } else {
     const d = await res.json().catch(() => ({}));
     toast(d.error || 'No se pudo eliminar cliente', 'err');
   }
+}
+
+/* ── Papelera ─────────────────────── */
+async function cargarPapelera() {
+  // Props
+  const pb = document.getElementById('trash-props-body');
+  if (pb) {
+    try {
+      const res = await fetch('/api/propiedades/papelera');
+      const items = await res.json();
+      if (!items.length) {
+        pb.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px">Sin propiedades eliminadas</td></tr>';
+      } else {
+        pb.innerHTML = items.map(p => {
+          const d = p.deleted_at ? new Date(p.deleted_at).toLocaleString('es-AR',{dateStyle:'short',timeStyle:'short'}) : '-';
+          return `<tr>
+            <td>${p.titulo||'Sin título'}</td>
+            <td style="text-transform:capitalize">${p.source_portal||'-'}</td>
+            <td>${p.precio||'-'}</td>
+            <td>${d}</td>
+            <td><button class="btn btn-ghost" style="padding:6px 10px;font-size:12px" onclick="restaurarPropiedad(${p.id})">Restaurar</button></td>
+          </tr>`;
+        }).join('');
+      }
+    } catch(e) { pb.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px">Error</td></tr>'; }
+  }
+  // Clients
+  const cb = document.getElementById('trash-clients-body');
+  if (cb) {
+    try {
+      const res = await fetch('/api/clientes/papelera');
+      const items = await res.json();
+      if (!items.length) {
+        cb.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px">Sin clientes eliminados</td></tr>';
+      } else {
+        cb.innerHTML = items.map(c => `<tr>
+          <td><strong>${c.nombre||'-'}</strong></td>
+          <td>${c.telefono||'-'}</td>
+          <td style="text-transform:capitalize">${c.tipo||'-'}</td>
+          <td>${c.zonas_busqueda||'-'}</td>
+          <td><button class="btn btn-ghost" style="padding:6px 10px;font-size:12px" onclick="restaurarCliente(${c.id})">Restaurar</button></td>
+        </tr>`).join('');
+      }
+    } catch(e) { cb.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px">Error</td></tr>'; }
+  }
+}
+
+async function restaurarPropiedad(id) {
+  const res = await fetch(`/api/propiedades/${id}/restaurar`, { method:'POST', headers:csrfHeaders(), body:'{}' });
+  if (res.ok) { toast('Propiedad restaurada'); cargarPapelera(); } else toast('Error al restaurar','err');
+}
+
+async function restaurarCliente(id) {
+  const res = await fetch(`/api/clientes/${id}/restaurar`, { method:'POST', headers:csrfHeaders(), body:'{}' });
+  if (res.ok) { toast('Cliente restaurado'); cargarPapelera(); } else toast('Error al restaurar','err');
 }
 
 /* ── Perfil ───────────────────────── */
@@ -1249,7 +1389,7 @@ async function guardarPerfil() {
     whatsapp:      document.getElementById('p_whatsapp').value.trim(),
     form_url:      document.getElementById('p_form').value.trim(),
   };
-  const res = await fetch('/api/perfil', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+  const res = await fetch('/api/perfil', { method:'POST', headers:csrfHeaders(), body:JSON.stringify(payload) });
   if (res.ok) {
     toast('Perfil guardado');
     document.getElementById('g_nombre').value   = payload.nombre;
@@ -1265,7 +1405,7 @@ async function cambiarPassword() {
   const pw_confirmar = document.getElementById('pw_confirmar').value;
   if (pw_nueva !== pw_confirmar) { toast('Las contraseñas no coinciden', 'err'); return; }
   if (pw_nueva.length < 6) { toast('Mínimo 6 caracteres', 'err'); return; }
-  const res = await fetch('/api/cambiar_password', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ pw_actual, pw_nueva }) });
+  const res = await fetch('/api/cambiar_password', { method:'POST', headers:csrfHeaders(), body:JSON.stringify({ pw_actual, pw_nueva }) });
   const data = await res.json();
   if (res.ok) {
     toast('Contraseña actualizada');
@@ -1303,7 +1443,7 @@ async function crearUsuario() {
   const username = document.getElementById('new_user').value.trim();
   const password = document.getElementById('new_pass').value.trim();
   if (!nombre || !username || !password) { toast('Completá todos los campos', 'err'); return; }
-  const res = await fetch('/api/admin/crear_usuario', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ nombre, username, password }) });
+  const res = await fetch('/api/admin/crear_usuario', { method:'POST', headers:csrfHeaders(), body:JSON.stringify({ nombre, username, password }) });
   const data = await res.json();
   if (res.ok) {
     cerrarModal(); toast(`Usuario "${username}" creado`); cargarUsuarios();
@@ -1312,7 +1452,7 @@ async function crearUsuario() {
 }
 
 async function toggleUser(username) {
-  const res = await fetch('/api/admin/toggle_usuario', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ username }) });
+  const res = await fetch('/api/admin/toggle_usuario', { method:'POST', headers:csrfHeaders(), body:JSON.stringify({ username }) });
   if (res.ok) { cargarUsuarios(); toast('Usuario actualizado'); }
   else toast('Error', 'err');
 }
@@ -1329,7 +1469,7 @@ function cerrarModalReset() { document.getElementById('modal-reset').classList.r
 async function confirmarReset() {
   const password = document.getElementById('reset_pass').value.trim();
   if (password.length < 6) { toast('Mínimo 6 caracteres', 'err'); return; }
-  const res = await fetch('/api/admin/reset_password', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ username: resetTarget, password }) });
+  const res = await fetch('/api/admin/reset_password', { method:'POST', headers:csrfHeaders(), body:JSON.stringify({ username: resetTarget, password }) });
   if (res.ok) { cerrarModalReset(); toast('Contraseña reseteada'); }
   else { const d = await res.json(); toast(d.error || 'Error', 'err'); }
 }
@@ -1338,7 +1478,7 @@ async function borrarUsuario(username) {
   if (!confirm(`¿Borrar usuario "${username}"? Esta acción no se puede deshacer.`)) return;
   const res = await fetch('/api/admin/delete_usuario', {
     method: 'POST',
-    headers: {'Content-Type':'application/json'},
+    headers: csrfHeaders(),
     body: JSON.stringify({ username }),
   });
   if (res.ok) {

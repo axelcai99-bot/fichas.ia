@@ -88,61 +88,39 @@ class PropertyRepository:
         with get_connection() as conn:
             if owner_username:
                 rows = conn.execute(
-                    "SELECT DISTINCT source_portal FROM properties WHERE owner_username = ? AND source_portal IS NOT NULL ORDER BY source_portal",
+                    "SELECT DISTINCT source_portal FROM properties WHERE owner_username = ? AND source_portal IS NOT NULL AND deleted_at IS NULL ORDER BY source_portal",
                     (owner_username,),
                 ).fetchall()
             else:
                 rows = conn.execute(
-                    "SELECT DISTINCT source_portal FROM properties WHERE source_portal IS NOT NULL ORDER BY source_portal",
+                    "SELECT DISTINCT source_portal FROM properties WHERE source_portal IS NOT NULL AND deleted_at IS NULL ORDER BY source_portal",
                 ).fetchall()
         return [r["source_portal"] for r in rows if r["source_portal"]]
 
-    def list_properties(self, limit: int = 50, owner_username: str | None = None, source_portal: str | None = None) -> list[dict[str, Any]]:
+    def list_properties(self, limit: int = 50, offset: int = 0, owner_username: str | None = None, source_portal: str | None = None) -> dict[str, Any]:
+        conditions = ["deleted_at IS NULL"]
+        params: list = []
+        if owner_username:
+            conditions.append("owner_username = ?")
+            params.append(owner_username)
+        if source_portal:
+            conditions.append("source_portal = ?")
+            params.append(source_portal)
+        where = " AND ".join(conditions)
+
         with get_connection() as conn:
-            if owner_username and source_portal:
-                rows = conn.execute(
-                    """
-                    SELECT id, titulo, precio, ubicacion, created_at, owner_username, source_portal
-                    FROM properties
-                    WHERE owner_username = ? AND source_portal = ?
-                    ORDER BY created_at DESC
-                    LIMIT ?
-                    """,
-                    (owner_username, source_portal, limit),
-                ).fetchall()
-            elif owner_username:
-                rows = conn.execute(
-                    """
-                    SELECT id, titulo, precio, ubicacion, created_at, owner_username, source_portal
-                    FROM properties
-                    WHERE owner_username = ?
-                    ORDER BY created_at DESC
-                    LIMIT ?
-                    """,
-                    (owner_username, limit),
-                ).fetchall()
-            elif source_portal:
-                rows = conn.execute(
-                    """
-                    SELECT id, titulo, precio, ubicacion, created_at, owner_username, source_portal
-                    FROM properties
-                    WHERE source_portal = ?
-                    ORDER BY created_at DESC
-                    LIMIT ?
-                    """,
-                    (source_portal, limit),
-                ).fetchall()
-            else:
-                rows = conn.execute(
-                    """
-                    SELECT id, titulo, precio, ubicacion, created_at, owner_username, source_portal
-                    FROM properties
-                    ORDER BY created_at DESC
-                    LIMIT ?
-                    """,
-                    (limit,),
-                ).fetchall()
-        return [
+            count_row = conn.execute(f"SELECT COUNT(*) AS total FROM properties WHERE {where}", params).fetchone()
+            total = count_row["total"] if count_row else 0
+            rows = conn.execute(
+                f"""
+                SELECT id, titulo, precio, ubicacion, created_at, owner_username, source_portal
+                FROM properties WHERE {where}
+                ORDER BY created_at DESC
+                LIMIT ? OFFSET ?
+                """,
+                params + [limit, offset],
+            ).fetchall()
+        items = [
             {
                 "id": r["id"],
                 "titulo": r["titulo"],
@@ -151,6 +129,51 @@ class PropertyRepository:
                 "created_at": r["created_at"],
                 "owner_username": r["owner_username"] or "admin",
                 "source_portal": r["source_portal"] or "zonaprop",
+            }
+            for r in rows
+        ]
+        return {"items": items, "total": total, "limit": limit, "offset": offset}
+
+    def soft_delete_property(self, property_id: int, owner_username: str | None = None) -> bool:
+        now = datetime.now().isoformat()
+        with get_connection() as conn:
+            if owner_username:
+                cur = conn.execute(
+                    "UPDATE properties SET deleted_at = ? WHERE id = ? AND owner_username = ? AND deleted_at IS NULL",
+                    (now, property_id, owner_username),
+                )
+            else:
+                cur = conn.execute(
+                    "UPDATE properties SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL",
+                    (now, property_id),
+                )
+            conn.commit()
+            return cur.rowcount > 0
+
+    def restore_property(self, property_id: int, owner_username: str) -> bool:
+        with get_connection() as conn:
+            cur = conn.execute(
+                "UPDATE properties SET deleted_at = NULL WHERE id = ? AND owner_username = ? AND deleted_at IS NOT NULL",
+                (property_id, owner_username),
+            )
+            conn.commit()
+            return cur.rowcount > 0
+
+    def list_deleted_properties(self, owner_username: str) -> list[dict[str, Any]]:
+        with get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT id, titulo, precio, ubicacion, created_at, owner_username, source_portal, deleted_at
+                FROM properties WHERE owner_username = ? AND deleted_at IS NOT NULL
+                ORDER BY deleted_at DESC LIMIT 50
+                """,
+                (owner_username,),
+            ).fetchall()
+        return [
+            {
+                "id": r["id"], "titulo": r["titulo"], "precio": r["precio"],
+                "ubicacion": r["ubicacion"], "created_at": r["created_at"],
+                "source_portal": r["source_portal"] or "zonaprop", "deleted_at": r["deleted_at"],
             }
             for r in rows
         ]
