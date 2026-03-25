@@ -836,13 +836,7 @@ class ScraperService:
 
     @staticmethod
     def _actions_for_portal(portal: str) -> list[dict[str, Any]]:
-        if portal != "zonaprop":
-            return [{"type": "wait", "milliseconds": 1500}]
-        return [
-            {"type": "wait", "milliseconds": 1800},
-            {
-                "type": "executeJavascript",
-                "script": """
+        expand_script = """
                 (() => {
                   const clickByText = (texts) => {
                     const nodes = Array.from(document.querySelectorAll('button, a, span, div'));
@@ -856,18 +850,12 @@ class ScraperService:
                     return false;
                   };
                   clickByText(['aceptar', 'entendido']);
-                  clickByText(['leer más', 'ver más']);
+                  clickByText(['leer más', 'ver más', 'mostrar más', 'ver descripción completa']);
                   clickByText(['ver todas las fotos', 'ver fotos', 'más fotos']);
                   return 'ok';
                 })();
-                """,
-            },
-            {"type": "wait", "milliseconds": 2200},
-            {"type": "scroll", "direction": "down"},
-            {"type": "wait", "milliseconds": 800},
-            {
-                "type": "executeJavascript",
-                "script": """
+                """
+        photos_script = """
                 (() => {
                   const clickByText = (texts) => {
                     const nodes = Array.from(document.querySelectorAll('button, a, span, div'));
@@ -883,8 +871,14 @@ class ScraperService:
                   clickByText(['ver todas las fotos', 'ver fotos', 'más fotos']);
                   return 'ok';
                 })();
-                """,
-            },
+                """
+        return [
+            {"type": "wait", "milliseconds": 1800},
+            {"type": "executeJavascript", "script": expand_script},
+            {"type": "wait", "milliseconds": 2200},
+            {"type": "scroll", "direction": "down"},
+            {"type": "wait", "milliseconds": 800},
+            {"type": "executeJavascript", "script": photos_script},
             {"type": "wait", "milliseconds": 2200},
         ]
 
