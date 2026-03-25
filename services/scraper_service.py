@@ -940,7 +940,32 @@ class ScraperService:
     @staticmethod
     def _actions_for_portal(portal: str) -> list[dict[str, Any]]:
         if portal != "zonaprop":
-            return [{"type": "wait", "milliseconds": 1500}]
+            return [
+                {"type": "wait", "milliseconds": 1500},
+                {
+                    "type": "executeJavascript",
+                    "script": """
+                    (() => {
+                      const clickByText = (texts) => {
+                        const nodes = Array.from(document.querySelectorAll('button, a, span, div'));
+                        for (const node of nodes) {
+                          const text = (node.innerText || node.textContent || '').trim().toLowerCase();
+                          if (texts.some(t => text.includes(t))) {
+                            node.click();
+                            return true;
+                          }
+                        }
+                        return false;
+                      };
+                      clickByText(['aceptar', 'entendido']);
+                      clickByText(['leer descripción completa', 'leer descripcion completa', 'ver descripción completa', 'leer más', 'ver más', 'ver descripción', 'ver descripcion']);
+                      clickByText(['ver todas las fotos', 'ver fotos', 'más fotos']);
+                      return 'ok';
+                    })();
+                    """,
+                },
+                {"type": "wait", "milliseconds": 2000},
+            ]
         return [
             {"type": "wait", "milliseconds": 1800},
             {
@@ -959,7 +984,7 @@ class ScraperService:
                     return false;
                   };
                   clickByText(['aceptar', 'entendido']);
-                  clickByText(['leer más', 'ver más']);
+                  clickByText(['leer descripción completa', 'leer descripcion completa', 'ver descripción completa', 'leer más', 'ver más']);
                   clickByText(['ver todas las fotos', 'ver fotos', 'más fotos']);
                   return 'ok';
                 })();

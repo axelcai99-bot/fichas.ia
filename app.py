@@ -511,7 +511,6 @@ def property_detail(property_id: int):
         images = [placeholder]
     images = [_build_image_src(image, prop.get("source_url", "")) for image in images]
 
-    merged_features = _merge_features(prop.get("caracteristicas", []), prop.get("detalles", {}))
     descripcion = prop.get("descripcion", "") or ""
     descripcion_parts = [p.strip() for p in descripcion.split("\n") if p.strip()] or [descripcion]
     wa_msg = urllib.parse.quote(
@@ -524,15 +523,12 @@ def property_detail(property_id: int):
         survey_url = f"{form_url}{sep}entry.0={urllib.parse.quote(prop.get('ubicacion') or prop.get('titulo') or '')}"
 
     detalles = prop.get("detalles", {}) or {}
-    caracteristicas_extra = [f for f in merged_features if not _is_detail_feature(f)]
 
     return render_template(
         "property_detail.html",
         prop=prop,
         images=images,
         detalles=detalles,
-        merged_features=merged_features[:10],
-        caracteristicas_extra=caracteristicas_extra[:12],
         descripcion_parts=descripcion_parts,
         wa_msg=wa_msg,
         survey_url=survey_url,
