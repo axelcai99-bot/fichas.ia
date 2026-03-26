@@ -795,6 +795,10 @@ class ScraperService:
             "logo", "favicon", "icon", "sprite", "placeholder",
             "watermark", "notesicon", "fav-", "fav_icon", ".svg",
             "floorplan", "planos", "plano", "staticmap", "mapa",
+            # Fotos de equipo/agencia que no son de la propiedad
+            "/equipo", "/team", "/staff", "/agencia", "/brand",
+            "/empresa", "/oficina", "/office", "/personas", "/people",
+            "/about", "/nosotros", "/quienes", "/equipo-",
         )
         image_path_tokens = (
             "/images/", "/image/", "/photos/", "/photo/",
@@ -1252,7 +1256,15 @@ class ScraperService:
     def _clean_description(text: str) -> str:
         if not text:
             return ""
-        text = re.sub(r"\bVer datos\b\.?", "", text, flags=re.I)
+        # Artefactos UI de ZonaProp
+        text = re.sub(r"\bN\s*Ver\s+datos\b\.?", "", text, flags=re.I)
+        text = re.sub(r"\bVer\s+datos\b\.?", "", text, flags=re.I)
+        text = re.sub(r"\bN\d{7,}\b", "", text)          # IDs tipo N1160127712
+        text = re.sub(r"(?m)^\s*N\s*$", "", text)         # Línea suelta con solo "N"
+        text = re.sub(r"\bLeer descripci[oó]n completa\b\.?", "", text, flags=re.I)
+        text = re.sub(r"\bLeer m[aá]s\b\.?", "", text, flags=re.I)
+        text = re.sub(r"\bVer m[aá]s\b\.?", "", text, flags=re.I)
+        # Firmas de inmobiliarias
         text = re.sub(r"\bLEPORE SAN CRISTOBAL\b.*$", "", text, flags=re.I | re.S)
         text = re.sub(r"\bLEPORE PROPIEDADES\b.*$", "", text, flags=re.I | re.S)
         text = re.sub(r"\bAVISO LEGAL:.*$", "", text, flags=re.I | re.S)
