@@ -1,6 +1,7 @@
 import json
 import os
 import sqlite3
+import warnings
 from datetime import datetime
 
 
@@ -116,13 +117,16 @@ def init_db() -> None:
         _ensure_column(conn, "clients", "deleted_at", "TEXT")
 
         # CRM pipeline columns for clients
-        _ensure_column(conn, "clients", "estado", "TEXT NOT NULL DEFAULT 'nuevo_lead'")
+        _ensure_column(conn, "clients", "estado", "TEXT NOT NULL DEFAULT 'new_lead'")
         _ensure_column(conn, "clients", "proxima_accion", "TEXT NOT NULL DEFAULT ''")
         _ensure_column(conn, "clients", "proxima_accion_fecha", "TEXT NOT NULL DEFAULT ''")
+        _ensure_column(conn, "clients", "proxima_accion_nota", "TEXT NOT NULL DEFAULT ''")
+        _ensure_column(conn, "clients", "apto_credito_estado", "TEXT NOT NULL DEFAULT 'indiferente'")
         _ensure_column(conn, "clients", "tipos_json", "TEXT NOT NULL DEFAULT '[]'")
         _ensure_column(conn, "clients", "ambientes_min", "INTEGER")
         _ensure_column(conn, "clients", "ambientes_max", "INTEGER")
         _ensure_column(conn, "clients", "zonas_json", "TEXT NOT NULL DEFAULT '[]'")
+        _migrate_clients_crm_enums(conn)
 
         # Client-Property interests
         conn.execute(
@@ -168,12 +172,23 @@ def _bootstrap_users() -> None:
             conn.commit()
             return
 
+        # Evita credenciales hardcodeadas débiles en entornos nuevos.
+        admin_password = (os.environ.get("ADMIN_PASSWORD") or "").strip()
+        if not admin_password:
+            admin_password = os.urandom(12).hex()
+            warnings.warn(
+                "ADMIN_PASSWORD no configurada. "
+                f"Se generó contraseña temporal para admin: {admin_password}. "
+                "Configurá ADMIN_PASSWORD para próximos inicios.",
+                stacklevel=1,
+            )
+
         conn.execute(
             """
             INSERT INTO users(username, password_hash, role, nombre, whatsapp, form_url, active, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            ("admin", hash_pw("admin123"), "admin", "Administrador", "", "", 1, now),
+            ("admin", hash_pw(admin_password), "admin", "Administrador", "", "", 1, now),
         )
         conn.commit()
 
@@ -190,6 +205,8 @@ def _import_users_json(conn: sqlite3.Connection) -> bool:
     if not isinstance(users, dict) or not users:
         return False
 
+    fallback_password = (os.environ.get("ADMIN_PASSWORD") or "").strip() or os.urandom(12).hex()
+
     for username, data in users.items():
         conn.execute(
             """
@@ -198,7 +215,7 @@ def _import_users_json(conn: sqlite3.Connection) -> bool:
             """,
             (
                 (username or "").strip().lower(),
-                data.get("password", hash_pw("admin123")),
+                data.get("password", hash_pw(fallback_password)),
                 data.get("role", "user"),
                 data.get("nombre", username),
                 data.get("whatsapp", ""),
@@ -250,3 +267,37 @@ def _ensure_properties_source_image_urls_column(conn: sqlite3.Connection) -> Non
     col_names = {c["name"] for c in cols}
     if "source_image_urls_json" not in col_names:
         conn.execute("ALTER TABLE properties ADD COLUMN source_image_urls_json TEXT NOT NULL DEFAULT '[]'")
+
+
+def _migrate_clients_crm_enums(conn: sqlite3.Connection) -> None:
+    estado_map = {
+        "nuevo_lead": "new_lead",
+        "contactado": "contacted",
+        "visito_propiedad": "visited_property",
+        "negociando": "negotiating",
+        "cerrado": "closed",
+        "perdido": "lost",
+    }
+    for old, new in estado_map.items():
+        conn.execute("UPDATE clients SET estado = ? WHERE estado = ?", (new, old))
+        conn.execute("UPDATE clients SET situacion = ? WHERE situacion = ?", (new, old))
+
+    accion_map = {
+        "llamar": "call",
+        "enviar_propiedades": "send_properties",
+        "coordinar_visita": "schedule_visit",
+        "seguimiento": "follow_up",
+    }
+    for old, new in accion_map.items():
+        conn.execute("UPDATE clients SET proxima_accion = ? WHERE proxima_accion = ?", (new, old))
+
+    conn.execute(
+        """
+        UPDATE clients
+        SET apto_credito_estado = CASE
+            WHEN apto_credito = 1 THEN 'si'
+            ELSE 'no'
+        END
+        WHERE apto_credito_estado IS NULL OR apto_credito_estado = ''
+        """
+    )

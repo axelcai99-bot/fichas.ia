@@ -76,9 +76,11 @@ def csrf_protect(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         if request.method in ("POST", "PUT", "DELETE"):
-            token = (request.headers.get("X-CSRF-Token") or
-                     (request.json or {}).get("_csrf") if request.is_json else None) or \
-                    request.form.get("_csrf", "")
+            token = request.headers.get("X-CSRF-Token", "")
+            if not token and request.is_json:
+                token = (request.get_json(silent=True) or {}).get("_csrf", "")
+            if not token:
+                token = request.form.get("_csrf", "")
             if not token or token != session.get("_csrf"):
                 return jsonify({"error": "Token CSRF inválido. Recargá la página."}), 403
         return f(*args, **kwargs)
@@ -116,12 +118,14 @@ def _cleanup_stale_jobs():
         stale = [k for k, v in JOBS.items() if now - v.get("created_at", now) > _JOB_TTL_SECONDS]
         for k in stale:
             JOBS.pop(k, None)
-VALID_CLIENT_TYPES = {"ph", "casa", "depto", "otro"}
+VALID_CLIENT_TYPES = {"depto", "ph", "casa", "lote", "oficina", "otro"}
 VALID_CLIENT_ESTADOS = {
-    "nuevo_lead", "contactado", "visito_propiedad",
-    "negociando", "cerrado", "perdido",
+    "new_lead", "contacted", "visited_property",
+    "negotiating", "closed", "lost",
 }
-VALID_CLIENT_ACCIONES = {"", "llamar", "enviar_propiedades", "coordinar_visita", "seguimiento"}
+VALID_CLIENT_ACCIONES = {
+    "", "call", "send_properties", "schedule_visit", "follow_up", "wait_response",
+}
 VALID_CLIENT_ZONAS = {
     "agronomia", "almagro", "balvanera", "barracas", "belgrano", "boedo", "caballito",
     "chacarita", "coghlan", "colegiales", "constitucion", "flores", "floresta", "la boca",
@@ -181,15 +185,16 @@ def _sanitize_client_payload(data: dict) -> tuple[bool, dict | str]:
         return False, "Teléfono inválido"
 
     # ── Pipeline status (enum) ──
-    estado = (data.get("estado") or "nuevo_lead").strip().lower()
+    estado = (data.get("estado") or "new_lead").strip().lower()
     if estado not in VALID_CLIENT_ESTADOS:
-        estado = "nuevo_lead"
+        estado = "new_lead"
 
     # ── Next action (enum + optional date) ──
     proxima_accion = (data.get("proxima_accion") or "").strip().lower()
     if proxima_accion not in VALID_CLIENT_ACCIONES:
         proxima_accion = ""
     proxima_accion_fecha = (data.get("proxima_accion_fecha") or "").strip()
+    proxima_accion_nota = re.sub(r"\s+", " ", (data.get("proxima_accion_nota") or "").strip())[:250]
 
     # ── Level 2: optional structured fields ──
     # Property types (array)
@@ -211,6 +216,12 @@ def _sanitize_client_payload(data: dict) -> tuple[bool, dict | str]:
             ambientes_max = max(1, min(10, int(ambientes_max)))
         except (ValueError, TypeError):
             ambientes_max = None
+    if ambientes_min and ambientes_max and ambientes_min > ambientes_max:
+        ambientes_min, ambientes_max = ambientes_max, ambientes_min
+    apto_credito_value = (data.get("apto_credito") or "").strip().lower()
+    if apto_credito_value not in {"si", "no", "indiferente"}:
+        apto_credito_value = "indiferente"
+
 
     # Zones (array)
     zonas_raw = data.get("zonas", [])
@@ -233,7 +244,8 @@ def _sanitize_client_payload(data: dict) -> tuple[bool, dict | str]:
         "presupuesto": presupuesto,
         "tipo": tipo_legacy,
         "ambientes": ambientes_legacy,
-        "apto_credito": bool(data.get("apto_credito")),
+        "apto_credito": apto_credito_value == "si",
+        "apto_credito_estado": apto_credito_value,
         "zonas_busqueda": zonas_legacy,
         "notas_resumidas": notas_resumidas,
         "situacion": estado,  # legacy column
@@ -241,6 +253,7 @@ def _sanitize_client_payload(data: dict) -> tuple[bool, dict | str]:
         "estado": estado,
         "proxima_accion": proxima_accion,
         "proxima_accion_fecha": proxima_accion_fecha,
+        "proxima_accion_nota": proxima_accion_nota,
         "tipos": tipos,
         "ambientes_min": ambientes_min,
         "ambientes_max": ambientes_max,
