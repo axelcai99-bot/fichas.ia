@@ -242,6 +242,51 @@ body {
 .input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(30,74,171,.12); }
 .input::placeholder { color: #3d2a14; }
 
+/* ══════════ CHIP CHECKBOXES ══════════ */
+.chip-check { cursor:pointer; }
+.chip-check input { display:none; }
+.chip-label {
+  display:inline-block; padding:6px 14px;
+  border-radius:20px; font-size:12px; font-weight:500;
+  background:var(--surface2); border:1px solid var(--border2);
+  color:var(--muted); transition:all .15s; user-select:none;
+}
+.chip-check input:checked + .chip-label {
+  background:var(--blue-soft); border-color:rgba(30,74,171,.4);
+  color:#7fa0e8; font-weight:600;
+}
+.chip-label:hover { border-color:var(--muted2); }
+
+/* ══════════ CLIENT CARD (pipeline) ══════════ */
+.cl-card {
+  display:grid; grid-template-columns:1fr auto;
+  gap:8px 16px; align-items:center;
+  padding:14px 18px; border-radius:8px;
+  background:var(--surface2); border:1px solid var(--border);
+  transition:border-color .15s; cursor:pointer;
+}
+.cl-card:hover { border-color:var(--muted2); }
+.cl-name { font-weight:600; font-size:14px; color:var(--text); }
+.cl-phone { font-size:12px; color:var(--muted); margin-left:10px; }
+.cl-meta { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:4px; }
+.cl-badge {
+  display:inline-block; padding:3px 10px; border-radius:12px;
+  font-size:10px; font-weight:600; letter-spacing:.04em; text-transform:uppercase;
+}
+.cl-badge-lead { background:rgba(30,74,171,.18); color:#7fa0e8; }
+.cl-badge-contactado { background:rgba(201,169,110,.18); color:var(--gold); }
+.cl-badge-visito { background:rgba(139,92,246,.18); color:#a78bfa; }
+.cl-badge-negociando { background:rgba(245,158,11,.18); color:#f59e0b; }
+.cl-badge-cerrado { background:rgba(16,185,129,.18); color:#10b981; }
+.cl-badge-perdido { background:rgba(239,68,68,.18); color:#ef4444; }
+.cl-action-tag {
+  display:inline-flex; align-items:center; gap:4px; padding:3px 9px;
+  border-radius:12px; font-size:10px; font-weight:500;
+  background:var(--acc-soft); color:var(--accent);
+}
+.cl-detail { font-size:11px; color:var(--muted); }
+.cl-actions { display:flex; gap:6px; justify-self:end; }
+
 .url-input {
   width: 100%;
   background: var(--bg);
@@ -567,104 +612,142 @@ body {
 
     <!-- ── CLIENTES ───────────────────────────────────── -->
     <div class="panel" id="panel-clientes">
-      <!-- Listado de clientes (vista principal) -->
+      <!-- ═══ Listado de clientes ═══ -->
       <div id="clientes-listado">
         <div class="card">
           <div class="admin-head" style="margin-bottom:12px">
             <div>
-              <span class="card-label" style="padding-bottom:0;margin-bottom:0;border-bottom:none">Clientes del agente</span>
-              <p class="note">Listado personal por usuario</p>
+              <span class="card-label" style="padding-bottom:0;margin-bottom:0;border-bottom:none">Pipeline de clientes</span>
+              <p class="note">Gestión comercial y seguimiento</p>
             </div>
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-              <input class="input" id="client-search" type="text" placeholder="Buscar por nombre, zona, tipo..." style="min-width:200px;padding:8px 10px" oninput="clientSearchDebounce()">
-              <button class="btn btn-ghost" style="padding:8px 12px" onclick="cargarClientes()">Recargar</button>
+              <input class="input" id="client-search" type="text" placeholder="Buscar nombre, zona, tipo..." style="min-width:180px;padding:8px 10px" oninput="clientSearchDebounce()">
+              <select class="input" id="client-filter-estado" style="width:auto;min-width:140px;padding:8px 10px" onchange="clientPage=1;cargarClientes()">
+                <option value="">Todos los estados</option>
+                <option value="nuevo_lead">Nuevo lead</option>
+                <option value="contactado">Contactado</option>
+                <option value="visito_propiedad">Visitó propiedad</option>
+                <option value="negociando">Negociando</option>
+                <option value="cerrado">Cerrado</option>
+                <option value="perdido">Perdido</option>
+              </select>
               <button class="btn btn-primary" style="padding:8px 14px" onclick="mostrarFormCliente()">+ Nuevo cliente</button>
             </div>
           </div>
-          <div style="overflow-x:auto">
-            <table class="user-table">
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>Nombre</th>
-                  <th>Teléfono</th>
-                  <th>Presupuesto</th>
-                  <th>Tipo</th>
-                  <th>Ambientes</th>
-                  <th>Apto crédito</th>
-                  <th>Zonas</th>
-                  <th>Situación</th>
-                  <th>Notas</th>
-                  <th>Acciones</th>
-                </tr>
-              </thead>
-              <tbody id="clients-body">
-                <tr><td colspan="11" style="text-align:center;color:var(--muted);padding:24px">Sin datos todavía</td></tr>
-              </tbody>
-            </table>
+          <div id="clients-cards" style="display:flex;flex-direction:column;gap:10px">
+            <div style="text-align:center;color:var(--muted);padding:24px">Sin datos todavía</div>
           </div>
           <div id="client-pagination" style="display:flex;align-items:center;gap:8px;justify-content:center;margin-top:12px"></div>
         </div>
       </div>
 
-      <!-- Formulario de cliente (oculto por defecto) -->
+      <!-- ═══ Formulario two-level ═══ -->
       <div id="clientes-form" style="display:none">
         <div class="card" style="margin-bottom:14px">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
             <span class="card-label" style="padding-bottom:0;margin-bottom:0;border-bottom:none" id="form-cliente-titulo">Nuevo cliente</span>
             <button class="btn btn-ghost" style="padding:6px 12px;font-size:12px" onclick="volverListadoClientes()">← Volver al listado</button>
           </div>
-          <div class="field-grid">
-            <div class="field"><span class="field-label">Nombre</span><input class="input" id="c_nombre" type="text" placeholder="Nombre y apellido" oninput="normalizarNombreCliente(this)"></div>
-            <div class="field"><span class="field-label">Teléfono</span><input class="input" id="c_telefono" type="text" inputmode="numeric" placeholder="11..." oninput="normalizarTelefonoCliente(this)"></div>
-            <div class="field"><span class="field-label">Presupuesto</span><input class="input" id="c_presupuesto" type="text" inputmode="numeric" placeholder="100.000" oninput="normalizarPresupuestoCliente(this)"></div>
-            <div class="field"><span class="field-label">Tipo</span>
-              <button type="button" class="input" id="c_tipo_btn" style="text-align:left" onclick="toggleTipoMenu()">Seleccionar tipo</button>
-              <div id="c_tipo_menu" style="display:none;margin-top:8px;padding:10px;border:1px solid var(--border2);border-radius:8px;background:var(--bg)">
-                <div style="display:flex;gap:10px;flex-wrap:wrap">
-                  <label><input type="checkbox" name="c_tipo" value="depto" onchange="refreshTipoLabel()">Depto</label>
-                  <label><input type="checkbox" name="c_tipo" value="ph" onchange="refreshTipoLabel()">PH</label>
-                  <label><input type="checkbox" name="c_tipo" value="casa" onchange="refreshTipoLabel()">Casa</label>
-                  <label><input type="checkbox" name="c_tipo" value="otro" onchange="refreshTipoLabel()">Otro</label>
-                </div>
-              </div>
-            </div>
-            <div class="field"><span class="field-label">Ambientes</span>
-              <button type="button" class="input" id="c_ambientes_btn" style="text-align:left" onclick="toggleAmbientesMenu()">Seleccionar ambientes</button>
-              <div id="c_ambientes_menu" style="display:none;margin-top:8px;padding:10px;border:1px solid var(--border2);border-radius:8px;background:var(--bg)">
-                <div style="display:flex;gap:10px;flex-wrap:wrap">
-                  <label><input type="checkbox" name="c_ambientes" value="1" onchange="refreshAmbientesLabel()">1</label>
-                  <label><input type="checkbox" name="c_ambientes" value="2" onchange="refreshAmbientesLabel()">2</label>
-                  <label><input type="checkbox" name="c_ambientes" value="3" onchange="refreshAmbientesLabel()">3</label>
-                  <label><input type="checkbox" name="c_ambientes" value="4" onchange="refreshAmbientesLabel()">4</label>
-                  <label><input type="checkbox" name="c_ambientes" value="5" onchange="refreshAmbientesLabel()">5</label>
-                  <label><input type="checkbox" name="c_ambientes" value="6" onchange="refreshAmbientesLabel()">6</label>
-                  <label><input type="checkbox" name="c_ambientes" value="7" onchange="refreshAmbientesLabel()">7</label>
-                  <label><input type="checkbox" name="c_ambientes" value="8" onchange="refreshAmbientesLabel()">8</label>
-                  <label><input type="checkbox" name="c_ambientes" value="9" onchange="refreshAmbientesLabel()">9</label>
-                  <label><input type="checkbox" name="c_ambientes" value="10" onchange="refreshAmbientesLabel()">10</label>
-                </div>
-              </div>
-            </div>
-            <div class="field"><span class="field-label">Apto crédito</span>
-              <select class="input" id="c_apto_credito">
-                <option value="si">Sí</option>
-                <option value="no">No</option>
+
+          <!-- LEVEL 1: Quick create (mandatory) -->
+          <p style="font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);margin-bottom:10px">Datos básicos</p>
+          <div class="field-grid" style="margin-bottom:16px">
+            <div class="field"><span class="field-label">Nombre *</span><input class="input" id="c_nombre" type="text" placeholder="Nombre y apellido" oninput="normalizarNombreCliente(this)"></div>
+            <div class="field"><span class="field-label">Teléfono *</span><input class="input" id="c_telefono" type="text" inputmode="numeric" placeholder="1155667788" oninput="normalizarTelefonoCliente(this)"></div>
+          </div>
+
+          <!-- PIPELINE: Estado + Próxima acción -->
+          <p style="font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);margin-bottom:10px">Pipeline</p>
+          <div class="field-grid" style="margin-bottom:16px">
+            <div class="field"><span class="field-label">Estado</span>
+              <select class="input" id="c_estado">
+                <option value="nuevo_lead">Nuevo lead</option>
+                <option value="contactado">Contactado</option>
+                <option value="visito_propiedad">Visitó propiedad</option>
+                <option value="negociando">Negociando</option>
+                <option value="cerrado">Cerrado</option>
+                <option value="perdido">Perdido</option>
               </select>
             </div>
-          </div>
-          <div class="field-grid one mt-4">
-            <div class="field"><span class="field-label">Zonas de búsqueda</span>
-              <input class="input" id="c_zonas_search" type="text" placeholder="Escribí una zona..." oninput="renderZonasSugeridas(this.value)">
-              <div id="c_zonas_sugeridas" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"></div>
-              <div id="c_zonas_selected" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"></div>
+            <div class="field"><span class="field-label">Próxima acción</span>
+              <select class="input" id="c_proxima_accion">
+                <option value="">Sin acción pendiente</option>
+                <option value="llamar">Llamar</option>
+                <option value="enviar_propiedades">Enviar propiedades</option>
+                <option value="coordinar_visita">Coordinar visita</option>
+                <option value="seguimiento">Seguimiento</option>
+              </select>
             </div>
-            <div class="field"><span class="field-label">Situación</span><input class="input" id="c_situacion" type="text" placeholder="Buscando, visita agendada, oferta..."></div>
-            <div class="field"><span class="field-label">Notas resumidas</span><textarea class="input" id="c_notas_resumidas" rows="3" placeholder="Observaciones clave..."></textarea></div>
+            <div class="field" id="c_fecha_wrap" style="display:none"><span class="field-label">Fecha de acción</span><input class="input" id="c_proxima_accion_fecha" type="date"></div>
           </div>
-          <div class="btn-row mt-4">
+
+          <div style="margin-bottom:16px">
             <button class="btn btn-primary" id="btn-cliente-guardar" onclick="guardarCliente()">Guardar cliente</button>
-            <button class="btn btn-ghost" onclick="limpiarFormularioCliente()">Limpiar</button>
+          </div>
+
+          <!-- LEVEL 2: Expandable details -->
+          <div style="border-top:1px solid var(--border);padding-top:14px">
+            <button type="button" id="toggle-level2" class="btn btn-ghost" style="padding:6px 12px;font-size:12px;width:100%;text-align:left" onclick="toggleLevel2()">
+              ▼ Agregar más información
+            </button>
+            <div id="level2-fields" style="display:none;margin-top:14px">
+              <!-- Presupuesto + Apto crédito -->
+              <p style="font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:10px">Presupuesto</p>
+              <div class="field-grid" style="margin-bottom:16px">
+                <div class="field"><span class="field-label">Presupuesto USD</span><input class="input" id="c_presupuesto" type="text" inputmode="numeric" placeholder="100.000" oninput="normalizarPresupuestoCliente(this)"></div>
+                <div class="field"><span class="field-label">Apto crédito</span>
+                  <select class="input" id="c_apto_credito">
+                    <option value="">No especificado</option>
+                    <option value="si">Sí</option>
+                    <option value="no">No</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Tipo + Ambientes -->
+              <p style="font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:10px">Búsqueda</p>
+              <div class="field-grid" style="margin-bottom:16px">
+                <div class="field"><span class="field-label">Tipo de propiedad</span>
+                  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
+                    <label class="chip-check"><input type="checkbox" name="c_tipo" value="depto"><span class="chip-label">Depto</span></label>
+                    <label class="chip-check"><input type="checkbox" name="c_tipo" value="ph"><span class="chip-label">PH</span></label>
+                    <label class="chip-check"><input type="checkbox" name="c_tipo" value="casa"><span class="chip-label">Casa</span></label>
+                    <label class="chip-check"><input type="checkbox" name="c_tipo" value="otro"><span class="chip-label">Otro</span></label>
+                  </div>
+                </div>
+                <div class="field"><span class="field-label">Ambientes</span>
+                  <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
+                    <select class="input" id="c_ambientes_min" style="width:auto;min-width:70px">
+                      <option value="">Min</option>
+                      <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+                      <option value="4">4</option><option value="5">5</option><option value="6">6+</option>
+                    </select>
+                    <span style="color:var(--muted)">a</span>
+                    <select class="input" id="c_ambientes_max" style="width:auto;min-width:70px">
+                      <option value="">Max</option>
+                      <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+                      <option value="4">4</option><option value="5">5</option><option value="6">6+</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Zonas -->
+              <p style="font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:10px">Zonas</p>
+              <div class="field-grid one" style="margin-bottom:16px">
+                <div class="field">
+                  <input class="input" id="c_zonas_search" type="text" placeholder="Escribí una zona..." oninput="renderZonasSugeridas(this.value)">
+                  <div id="c_zonas_sugeridas" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"></div>
+                  <div id="c_zonas_selected" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"></div>
+                </div>
+              </div>
+
+              <!-- Notas -->
+              <p style="font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:10px">Notas</p>
+              <div class="field-grid one" style="margin-bottom:8px">
+                <div class="field"><textarea class="input" id="c_notas_resumidas" rows="3" placeholder="Observaciones clave del cliente..."></textarea></div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1078,6 +1161,20 @@ function clientSearchDebounce() {
   _clientSearchTimer = setTimeout(() => { clientPage = 1; cargarClientes(); }, 350);
 }
 
+/* ── Estado labels & badge classes ─── */
+const ESTADO_LABELS = {
+  nuevo_lead:'Nuevo lead', contactado:'Contactado', visito_propiedad:'Visitó propiedad',
+  negociando:'Negociando', cerrado:'Cerrado', perdido:'Perdido'
+};
+const ESTADO_BADGE = {
+  nuevo_lead:'cl-badge-lead', contactado:'cl-badge-contactado', visito_propiedad:'cl-badge-visito',
+  negociando:'cl-badge-negociando', cerrado:'cl-badge-cerrado', perdido:'cl-badge-perdido'
+};
+const ACCION_LABELS = {
+  llamar:'Llamar', enviar_propiedades:'Enviar propiedades',
+  coordinar_visita:'Coordinar visita', seguimiento:'Seguimiento'
+};
+
 /* ── Clientes: navegación ─────────── */
 function mostrarFormCliente() {
   limpiarFormularioCliente();
@@ -1092,52 +1189,37 @@ function volverListadoClientes() {
   limpiarFormularioCliente();
 }
 
-/* ── Clientes ─────────────────────── */
-function normalizarNombreCliente(input) {
-  input.value = (input.value || '').replace(/[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ ]/g, '').replace(/\s+/g, ' ');
+function toggleLevel2() {
+  const fields = document.getElementById('level2-fields');
+  const btn = document.getElementById('toggle-level2');
+  if (!fields) return;
+  const open = fields.style.display !== 'none';
+  fields.style.display = open ? 'none' : 'block';
+  btn.textContent = open ? '▼ Agregar más información' : '▲ Ocultar información adicional';
 }
 
+/* ── Input normalizers ────────────── */
+function normalizarNombreCliente(input) {
+  input.value = (input.value || '').replace(/[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ .'-]/g, '').replace(/\s+/g, ' ');
+}
 function normalizarTelefonoCliente(input) {
   input.value = (input.value || '').replace(/\D/g, '');
 }
-
 function normalizarPresupuestoCliente(input) {
   const digits = (input.value || '').replace(/\D/g, '');
   if (!digits) { input.value = ''; return; }
   input.value = digits.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 }
 
-function obtenerChecks(name) {
-  return Array.from(document.querySelectorAll(`input[name="${name}"]:checked`)).map(el => el.value);
-}
+/* ── Próxima acción: show/hide date ── */
+document.addEventListener('change', function(e) {
+  if (e.target && e.target.id === 'c_proxima_accion') {
+    document.getElementById('c_fecha_wrap').style.display = e.target.value ? 'flex' : 'none';
+  }
+});
 
-function toggleTipoMenu() {
-  const menu = document.getElementById('c_tipo_menu');
-  if (!menu) return;
-  menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
-}
-
-function refreshTipoLabel() {
-  const values = obtenerChecks('c_tipo');
-  const btn = document.getElementById('c_tipo_btn');
-  if (!btn) return;
-  btn.textContent = values.length ? `Tipo: ${values.join(', ')}` : 'Seleccionar tipo';
-}
-
-function toggleAmbientesMenu() {
-  const menu = document.getElementById('c_ambientes_menu');
-  if (!menu) return;
-  menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
-}
-
-function refreshAmbientesLabel() {
-  const values = obtenerChecks('c_ambientes');
-  const btn = document.getElementById('c_ambientes_btn');
-  if (!btn) return;
-  btn.textContent = values.length ? `Ambientes: ${values.join(', ')}` : 'Seleccionar ambientes';
-}
-
-function renderZonasSugeridas(filter = '') {
+/* ── Zonas (tags) ─────────────────── */
+function renderZonasSugeridas(filter) {
   const q = (filter || '').trim().toLowerCase();
   const box = document.getElementById('c_zonas_sugeridas');
   if (!box) return;
@@ -1147,7 +1229,6 @@ function renderZonasSugeridas(filter = '') {
     `<button type="button" class="btn btn-ghost" style="padding:5px 9px;font-size:12px" onclick="agregarZonaBusqueda('${z}')">${z}</button>`
   ).join('');
 }
-
 function renderZonasSeleccionadas() {
   const box = document.getElementById('c_zonas_selected');
   if (!box) return;
@@ -1155,72 +1236,70 @@ function renderZonasSeleccionadas() {
     `<span class="badge badge-user" style="gap:6px">${z} <button type="button" style="background:none;border:none;color:inherit;cursor:pointer" onclick="quitarZonaBusqueda('${z}')">✕</button></span>`
   ).join('');
 }
-
 function agregarZonaBusqueda(zona) {
   if (!zona) return;
   ZONAS_SELECTED.add(zona.toLowerCase());
   renderZonasSeleccionadas();
-  renderZonasSugeridas(document.getElementById('c_zonas_search')?.value || '');
+  const searchEl = document.getElementById('c_zonas_search');
+  if (searchEl) { searchEl.value = ''; }
+  renderZonasSugeridas('');
 }
-
 function quitarZonaBusqueda(zona) {
   ZONAS_SELECTED.delete((zona || '').toLowerCase());
   renderZonasSeleccionadas();
   renderZonasSugeridas(document.getElementById('c_zonas_search')?.value || '');
 }
 
+/* ── Build payload ────────────────── */
 function _payloadCliente() {
-  const tipos = obtenerChecks('c_tipo');
-  const ambientes = obtenerChecks('c_ambientes');
+  const tipos = Array.from(document.querySelectorAll('input[name="c_tipo"]:checked')).map(el => el.value);
   const zonas = Array.from(ZONAS_SELECTED);
+  const ambMin = document.getElementById('c_ambientes_min')?.value || '';
+  const ambMax = document.getElementById('c_ambientes_max')?.value || '';
   return {
     nombre: document.getElementById('c_nombre').value.trim(),
     telefono: document.getElementById('c_telefono').value.trim(),
-    presupuesto: document.getElementById('c_presupuesto').value.trim(),
-    tipo: tipos.join(', '),
-    ambientes: ambientes.join(', '),
-    apto_credito: document.getElementById('c_apto_credito').value === 'si',
-    zonas_busqueda: zonas.join(', '),
-    notas_resumidas: document.getElementById('c_notas_resumidas').value.trim(),
-    situacion: document.getElementById('c_situacion').value.trim(),
+    presupuesto: document.getElementById('c_presupuesto')?.value?.trim() || '',
+    tipos: tipos,
+    ambientes_min: ambMin ? parseInt(ambMin) : null,
+    ambientes_max: ambMax ? parseInt(ambMax) : null,
+    apto_credito: document.getElementById('c_apto_credito')?.value === 'si',
+    zonas: zonas,
+    notas_resumidas: document.getElementById('c_notas_resumidas')?.value?.trim() || '',
+    estado: document.getElementById('c_estado')?.value || 'nuevo_lead',
+    proxima_accion: document.getElementById('c_proxima_accion')?.value || '',
+    proxima_accion_fecha: document.getElementById('c_proxima_accion_fecha')?.value || '',
   };
 }
 
 function limpiarFormularioCliente() {
   editingClientId = null;
   document.getElementById('btn-cliente-guardar').textContent = 'Guardar cliente';
-  ['c_nombre','c_telefono','c_presupuesto','c_notas_resumidas','c_situacion','c_zonas_search']
-    .forEach(id => {
-      const el = document.getElementById(id);
-      if (!el) return;
-      el.value = '';
-    });
-  document.querySelectorAll('input[name="c_tipo"], input[name="c_ambientes"]').forEach(el => { el.checked = false; });
-  document.getElementById('c_tipo_menu').style.display = 'none';
-  document.getElementById('c_ambientes_menu').style.display = 'none';
-  refreshTipoLabel();
-  refreshAmbientesLabel();
+  ['c_nombre','c_telefono','c_presupuesto','c_notas_resumidas','c_zonas_search','c_proxima_accion_fecha']
+    .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  document.querySelectorAll('input[name="c_tipo"]').forEach(el => { el.checked = false; });
+  document.getElementById('c_estado').value = 'nuevo_lead';
+  document.getElementById('c_proxima_accion').value = '';
+  document.getElementById('c_fecha_wrap').style.display = 'none';
+  document.getElementById('c_ambientes_min').value = '';
+  document.getElementById('c_ambientes_max').value = '';
+  document.getElementById('c_apto_credito').value = '';
   ZONAS_SELECTED.clear();
   renderZonasSeleccionadas();
-  renderZonasSugeridas(document.getElementById('c_zonas_search')?.value || '');
-  document.getElementById('c_apto_credito').value = 'si';
+  renderZonasSugeridas('');
+  // Collapse level 2
+  document.getElementById('level2-fields').style.display = 'none';
+  document.getElementById('toggle-level2').textContent = '▼ Agregar más información';
 }
 
 async function guardarCliente() {
   const payload = _payloadCliente();
   if (!payload.nombre) { toast('Nombre requerido', 'err'); return; }
-  if (!/^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ ]+$/.test(payload.nombre)) { toast('Nombre solo letras', 'err'); return; }
+  if (!/^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ .'-]+$/.test(payload.nombre)) { toast('Nombre solo letras', 'err'); return; }
   if (!payload.telefono || !/^\d{8,15}$/.test(payload.telefono)) { toast('Teléfono solo números (8 a 15)', 'err'); return; }
-  if (!payload.tipo) { toast('Seleccioná al menos un tipo', 'err'); return; }
-  if (payload.ambientes && !/^((10|[1-9])(,\s*(10|[1-9]))*)$/.test(payload.ambientes)) { toast('Ambientes: solo 1 a 10', 'err'); return; }
-  if (!payload.zonas_busqueda) { toast('Seleccioná al menos una zona', 'err'); return; }
   const url = editingClientId ? `/api/clientes/${editingClientId}` : '/api/clientes';
   const method = editingClientId ? 'PUT' : 'POST';
-  const res = await fetch(url, {
-    method,
-    headers: csrfHeaders(),
-    body: JSON.stringify(payload),
-  });
+  const res = await fetch(url, { method, headers: csrfHeaders(), body: JSON.stringify(payload) });
   if (res.ok) {
     toast(editingClientId ? 'Cliente actualizado' : 'Cliente creado');
     limpiarFormularioCliente();
@@ -1234,14 +1313,16 @@ async function guardarCliente() {
 
 async function cargarClientes(page) {
   if (page !== undefined) clientPage = page;
-  const tbody = document.getElementById('clients-body');
-  if (!tbody) return;
+  const container = document.getElementById('clients-cards');
+  if (!container) return;
   const searchVal = document.getElementById('client-search')?.value?.trim() || '';
+  const estadoFilter = document.getElementById('client-filter-estado')?.value || '';
   let q = `?page=${clientPage}&per_page=${clientPerPage}`;
   if (searchVal) q += `&q=${encodeURIComponent(searchVal)}`;
+  if (estadoFilter) q += `&estado=${encodeURIComponent(estadoFilter)}`;
   const res = await fetch('/api/clientes' + q);
   if (!res.ok) {
-    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:24px">No se pudo cargar</td></tr>';
+    container.innerHTML = '<div style="text-align:center;color:var(--muted);padding:24px">No se pudo cargar</div>';
     return;
   }
   const data = await res.json();
@@ -1249,30 +1330,39 @@ async function cargarClientes(page) {
   clientTotal = data.total || 0;
   CLIENTS_CACHE = clients;
   if (!CLIENTS_CACHE.length) {
-    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:24px">Sin clientes todavía</td></tr>';
+    container.innerHTML = '<div style="text-align:center;color:var(--muted);padding:24px">Sin clientes todavía</div>';
     renderClientPagination();
     return;
   }
-  tbody.innerHTML = CLIENTS_CACHE.map((c, idx) => `
-    <tr>
-      <td>#${c.id}</td>
-      <td><strong>${c.nombre || '-'}</strong></td>
-      <td>${c.telefono || '-'}</td>
-      <td>${c.presupuesto || '-'}</td>
-      <td style="text-transform:capitalize">${c.tipo || '-'}</td>
-      <td>${c.ambientes || '-'}</td>
-      <td>${c.apto_credito ? 'Sí' : 'No'}</td>
-      <td>${c.zonas_busqueda || '-'}</td>
-      <td>${c.situacion || '-'}</td>
-      <td>${c.notas_resumidas || '-'}</td>
-      <td>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn btn-ghost" style="padding:6px 10px;font-size:12px" onclick="editarCliente(${idx})">Editar</button>
-          <button class="btn btn-danger" style="padding:6px 10px;font-size:12px" onclick="eliminarCliente(${c.id})">Borrar</button>
+  container.innerHTML = CLIENTS_CACHE.map((c, idx) => {
+    const estado = c.estado || 'nuevo_lead';
+    const estadoLabel = ESTADO_LABELS[estado] || estado;
+    const estadoBadge = ESTADO_BADGE[estado] || 'cl-badge-lead';
+    const accion = c.proxima_accion ? (ACCION_LABELS[c.proxima_accion] || c.proxima_accion) : '';
+    const accionFecha = c.proxima_accion_fecha || '';
+    const tipos = (c.tipos && c.tipos.length) ? c.tipos.map(t => t.charAt(0).toUpperCase()+t.slice(1)).join(', ') : '';
+    const zonas = (c.zonas && c.zonas.length) ? c.zonas.map(z => z.charAt(0).toUpperCase()+z.slice(1)).join(', ') : '';
+    const ambStr = c.ambientes_min ? (c.ambientes_max && c.ambientes_max !== c.ambientes_min ? `${c.ambientes_min}-${c.ambientes_max} amb` : `${c.ambientes_min} amb`) : '';
+    let metaItems = [];
+    if (tipos) metaItems.push(`<span class="cl-detail">${tipos}</span>`);
+    if (ambStr) metaItems.push(`<span class="cl-detail">${ambStr}</span>`);
+    if (c.presupuesto) metaItems.push(`<span class="cl-detail">USD ${c.presupuesto}</span>`);
+    if (zonas) metaItems.push(`<span class="cl-detail">${zonas}</span>`);
+    return `<div class="cl-card" onclick="editarCliente(${idx})">
+      <div>
+        <div><span class="cl-name">${c.nombre || '-'}</span><span class="cl-phone">${c.telefono || ''}</span></div>
+        <div class="cl-meta">
+          <span class="cl-badge ${estadoBadge}">${estadoLabel}</span>
+          ${accion ? `<span class="cl-action-tag">${accion}${accionFecha ? ' · '+accionFecha : ''}</span>` : ''}
+          ${metaItems.length ? '<span style="color:var(--muted2)">·</span>' + metaItems.join('<span style="color:var(--muted2);margin:0 2px">·</span>') : ''}
         </div>
-      </td>
-    </tr>
-  `).join('');
+      </div>
+      <div class="cl-actions" onclick="event.stopPropagation()">
+        <button class="btn btn-ghost" style="padding:5px 10px;font-size:11px" onclick="editarCliente(${idx})">Editar</button>
+        <button class="btn btn-danger" style="padding:5px 10px;font-size:11px" onclick="eliminarCliente(${c.id})">Borrar</button>
+      </div>
+    </div>`;
+  }).join('');
   renderClientPagination();
 }
 
@@ -1296,20 +1386,33 @@ function editarCliente(idx) {
   document.getElementById('form-cliente-titulo').textContent = 'Editar cliente';
   document.getElementById('c_nombre').value = c.nombre || '';
   document.getElementById('c_telefono').value = c.telefono || '';
+  // Pipeline
+  document.getElementById('c_estado').value = c.estado || 'nuevo_lead';
+  document.getElementById('c_proxima_accion').value = c.proxima_accion || '';
+  document.getElementById('c_proxima_accion_fecha').value = c.proxima_accion_fecha || '';
+  document.getElementById('c_fecha_wrap').style.display = c.proxima_accion ? 'flex' : 'none';
+  // Level 2 — auto-expand if has data
+  const tiposArr = c.tipos || [];
+  const zonasArr = c.zonas || [];
+  const hasLevel2 = c.presupuesto || tiposArr.length || (c.ambientes_min) || zonasArr.length || c.notas_resumidas;
   document.getElementById('c_presupuesto').value = c.presupuesto || '';
-  const tiposSet = new Set((c.tipo || '').split(',').map(x => x.trim().toLowerCase()).filter(Boolean));
-  const ambSet = new Set((c.ambientes || '').split(',').map(x => x.trim()).filter(Boolean));
-  document.querySelectorAll('input[name="c_tipo"]').forEach(el => { el.checked = tiposSet.has((el.value || '').toLowerCase()); });
-  document.querySelectorAll('input[name="c_ambientes"]').forEach(el => { el.checked = ambSet.has((el.value || '').trim()); });
-  refreshTipoLabel();
-  refreshAmbientesLabel();
-  document.getElementById('c_apto_credito').value = c.apto_credito ? 'si' : 'no';
+  document.getElementById('c_apto_credito').value = c.apto_credito ? 'si' : (c.apto_credito === false ? 'no' : '');
+  document.querySelectorAll('input[name="c_tipo"]').forEach(el => { el.checked = tiposArr.includes(el.value); });
+  document.getElementById('c_ambientes_min').value = c.ambientes_min || '';
+  document.getElementById('c_ambientes_max').value = c.ambientes_max || '';
   ZONAS_SELECTED.clear();
-  (c.zonas_busqueda || '').split(',').map(x => x.trim().toLowerCase()).filter(Boolean).forEach(z => ZONAS_SELECTED.add(z));
+  zonasArr.forEach(z => ZONAS_SELECTED.add(z));
   renderZonasSeleccionadas();
-  renderZonasSugeridas(document.getElementById('c_zonas_search')?.value || '');
+  renderZonasSugeridas('');
   document.getElementById('c_notas_resumidas').value = c.notas_resumidas || '';
-  document.getElementById('c_situacion').value = c.situacion || '';
+  // Show level 2 if has data
+  if (hasLevel2) {
+    document.getElementById('level2-fields').style.display = 'block';
+    document.getElementById('toggle-level2').textContent = '▲ Ocultar información adicional';
+  } else {
+    document.getElementById('level2-fields').style.display = 'none';
+    document.getElementById('toggle-level2').textContent = '▼ Agregar más información';
+  }
   document.getElementById('clientes-listado').style.display = 'none';
   document.getElementById('clientes-form').style.display = 'block';
 }

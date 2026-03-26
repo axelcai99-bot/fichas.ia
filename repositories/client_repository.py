@@ -1,17 +1,47 @@
+import json
 from datetime import datetime
 from typing import Any
 
 from db import get_connection
 
 
+# ── Valid ENUMs ──────────────────────────────────
+VALID_ESTADOS = {
+    "nuevo_lead", "contactado", "visito_propiedad",
+    "negociando", "cerrado", "perdido",
+}
+VALID_ACCIONES = {
+    "", "llamar", "enviar_propiedades", "coordinar_visita", "seguimiento",
+}
+
+ESTADO_LABELS = {
+    "nuevo_lead": "Nuevo lead",
+    "contactado": "Contactado",
+    "visito_propiedad": "Visitó propiedad",
+    "negociando": "Negociando",
+    "cerrado": "Cerrado",
+    "perdido": "Perdido",
+}
+
+ACCION_LABELS = {
+    "llamar": "Llamar",
+    "enviar_propiedades": "Enviar propiedades",
+    "coordinar_visita": "Coordinar visita",
+    "seguimiento": "Seguimiento",
+}
+
+
 class ClientRepository:
-    def list_clients(self, owner_username: str, search: str = "", limit: int = 50, offset: int = 0) -> dict[str, Any]:
+    def list_clients(self, owner_username: str, search: str = "", estado: str = "", limit: int = 50, offset: int = 0) -> dict[str, Any]:
         conditions = ["owner_username = ?", "deleted_at IS NULL"]
         params: list = [owner_username]
         if search:
-            conditions.append("(nombre LIKE ? OR telefono LIKE ? OR zonas_busqueda LIKE ? OR tipo LIKE ?)")
+            conditions.append("(nombre LIKE ? OR telefono LIKE ? OR zonas_json LIKE ? OR tipos_json LIKE ?)")
             q = f"%{search}%"
             params.extend([q, q, q, q])
+        if estado:
+            conditions.append("estado = ?")
+            params.append(estado)
         where = " AND ".join(conditions)
 
         with get_connection() as conn:
@@ -20,7 +50,10 @@ class ClientRepository:
             rows = conn.execute(
                 f"""
                 SELECT id, owner_username, nombre, telefono, presupuesto, tipo, ambientes,
-                       apto_credito, zonas_busqueda, notas_resumidas, situacion, created_at, updated_at
+                       apto_credito, zonas_busqueda, notas_resumidas, situacion,
+                       estado, proxima_accion, proxima_accion_fecha,
+                       tipos_json, ambientes_min, ambientes_max, zonas_json,
+                       created_at, updated_at
                 FROM clients WHERE {where}
                 ORDER BY updated_at DESC LIMIT ? OFFSET ?
                 """,
@@ -35,21 +68,31 @@ class ClientRepository:
                 """
                 INSERT INTO clients(
                     owner_username, nombre, telefono, presupuesto, tipo, ambientes,
-                    apto_credito, zonas_busqueda, notas_resumidas, situacion, created_at, updated_at
+                    apto_credito, zonas_busqueda, notas_resumidas, situacion,
+                    estado, proxima_accion, proxima_accion_fecha,
+                    tipos_json, ambientes_min, ambientes_max, zonas_json,
+                    created_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     owner_username,
                     payload.get("nombre", "").strip(),
                     payload.get("telefono", "").strip(),
                     payload.get("presupuesto", "").strip(),
-                    payload.get("tipo", "otro").strip().lower(),
+                    payload.get("tipo", "").strip().lower(),
                     payload.get("ambientes", "").strip(),
                     1 if payload.get("apto_credito") else 0,
                     payload.get("zonas_busqueda", "").strip(),
                     payload.get("notas_resumidas", "").strip(),
                     payload.get("situacion", "").strip(),
+                    payload.get("estado", "nuevo_lead"),
+                    payload.get("proxima_accion", ""),
+                    payload.get("proxima_accion_fecha", ""),
+                    json.dumps(payload.get("tipos", []), ensure_ascii=False),
+                    payload.get("ambientes_min"),
+                    payload.get("ambientes_max"),
+                    json.dumps(payload.get("zonas", []), ensure_ascii=False),
                     now,
                     now,
                 ),
@@ -64,19 +107,29 @@ class ClientRepository:
                 """
                 UPDATE clients
                 SET nombre = ?, telefono = ?, presupuesto = ?, tipo = ?, ambientes = ?,
-                    apto_credito = ?, zonas_busqueda = ?, notas_resumidas = ?, situacion = ?, updated_at = ?
+                    apto_credito = ?, zonas_busqueda = ?, notas_resumidas = ?, situacion = ?,
+                    estado = ?, proxima_accion = ?, proxima_accion_fecha = ?,
+                    tipos_json = ?, ambientes_min = ?, ambientes_max = ?, zonas_json = ?,
+                    updated_at = ?
                 WHERE id = ? AND owner_username = ?
                 """,
                 (
                     payload.get("nombre", "").strip(),
                     payload.get("telefono", "").strip(),
                     payload.get("presupuesto", "").strip(),
-                    payload.get("tipo", "otro").strip().lower(),
+                    payload.get("tipo", "").strip().lower(),
                     payload.get("ambientes", "").strip(),
                     1 if payload.get("apto_credito") else 0,
                     payload.get("zonas_busqueda", "").strip(),
                     payload.get("notas_resumidas", "").strip(),
                     payload.get("situacion", "").strip(),
+                    payload.get("estado", "nuevo_lead"),
+                    payload.get("proxima_accion", ""),
+                    payload.get("proxima_accion_fecha", ""),
+                    json.dumps(payload.get("tipos", []), ensure_ascii=False),
+                    payload.get("ambientes_min"),
+                    payload.get("ambientes_max"),
+                    json.dumps(payload.get("zonas", []), ensure_ascii=False),
                     now,
                     client_id,
                     owner_username,
@@ -109,7 +162,10 @@ class ClientRepository:
             rows = conn.execute(
                 """
                 SELECT id, owner_username, nombre, telefono, presupuesto, tipo, ambientes,
-                       apto_credito, zonas_busqueda, notas_resumidas, situacion, created_at, updated_at
+                       apto_credito, zonas_busqueda, notas_resumidas, situacion,
+                       estado, proxima_accion, proxima_accion_fecha,
+                       tipos_json, ambientes_min, ambientes_max, zonas_json,
+                       created_at, updated_at
                 FROM clients WHERE owner_username = ? AND deleted_at IS NOT NULL
                 ORDER BY updated_at DESC LIMIT 50
                 """,
@@ -128,6 +184,27 @@ class ClientRepository:
 
     @staticmethod
     def _row_to_dict(row) -> dict[str, Any]:
+        # Parse new JSON columns with fallback to legacy comma-separated fields
+        tipos_raw = row["tipos_json"] if "tipos_json" in row.keys() else "[]"
+        zonas_raw = row["zonas_json"] if "zonas_json" in row.keys() else "[]"
+
+        try:
+            tipos = json.loads(tipos_raw) if tipos_raw else []
+        except (json.JSONDecodeError, TypeError):
+            tipos = []
+        try:
+            zonas = json.loads(zonas_raw) if zonas_raw else []
+        except (json.JSONDecodeError, TypeError):
+            zonas = []
+
+        # Fallback: if new columns empty, parse from legacy comma-separated
+        if not tipos:
+            legacy_tipo = row["tipo"] or ""
+            tipos = [t.strip().lower() for t in legacy_tipo.split(",") if t.strip()]
+        if not zonas:
+            legacy_zonas = row["zonas_busqueda"] or ""
+            zonas = [z.strip().lower() for z in legacy_zonas.split(",") if z.strip()]
+
         return {
             "id": row["id"],
             "owner_username": row["owner_username"],
@@ -140,6 +217,14 @@ class ClientRepository:
             "zonas_busqueda": row["zonas_busqueda"],
             "notas_resumidas": row["notas_resumidas"],
             "situacion": row["situacion"],
+            # New CRM fields
+            "estado": row["estado"] if "estado" in row.keys() else "nuevo_lead",
+            "proxima_accion": row["proxima_accion"] if "proxima_accion" in row.keys() else "",
+            "proxima_accion_fecha": row["proxima_accion_fecha"] if "proxima_accion_fecha" in row.keys() else "",
+            "tipos": tipos,
+            "ambientes_min": row["ambientes_min"] if "ambientes_min" in row.keys() else None,
+            "ambientes_max": row["ambientes_max"] if "ambientes_max" in row.keys() else None,
+            "zonas": zonas,
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
         }

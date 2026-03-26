@@ -115,6 +115,15 @@ def init_db() -> None:
         _ensure_column(conn, "properties", "deleted_at", "TEXT")
         _ensure_column(conn, "clients", "deleted_at", "TEXT")
 
+        # CRM pipeline columns for clients
+        _ensure_column(conn, "clients", "estado", "TEXT NOT NULL DEFAULT 'nuevo_lead'")
+        _ensure_column(conn, "clients", "proxima_accion", "TEXT NOT NULL DEFAULT ''")
+        _ensure_column(conn, "clients", "proxima_accion_fecha", "TEXT NOT NULL DEFAULT ''")
+        _ensure_column(conn, "clients", "tipos_json", "TEXT NOT NULL DEFAULT '[]'")
+        _ensure_column(conn, "clients", "ambientes_min", "INTEGER")
+        _ensure_column(conn, "clients", "ambientes_max", "INTEGER")
+        _ensure_column(conn, "clients", "zonas_json", "TEXT NOT NULL DEFAULT '[]'")
+
         # Client-Property interests
         conn.execute(
             """

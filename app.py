@@ -117,6 +117,11 @@ def _cleanup_stale_jobs():
         for k in stale:
             JOBS.pop(k, None)
 VALID_CLIENT_TYPES = {"ph", "casa", "depto", "otro"}
+VALID_CLIENT_ESTADOS = {
+    "nuevo_lead", "contactado", "visito_propiedad",
+    "negociando", "cerrado", "perdido",
+}
+VALID_CLIENT_ACCIONES = {"", "llamar", "enviar_propiedades", "coordinar_visita", "seguimiento"}
 VALID_CLIENT_ZONAS = {
     "agronomia", "almagro", "balvanera", "barracas", "belgrano", "boedo", "caballito",
     "chacarita", "coghlan", "colegiales", "constitucion", "flores", "floresta", "la boca",
@@ -163,55 +168,83 @@ def _sanitize_client_payload(data: dict) -> tuple[bool, dict | str]:
     nombre = re.sub(r"\s+", " ", (data.get("nombre") or "").strip())
     telefono = re.sub(r"\D", "", data.get("telefono") or "")
     presupuesto = _normalize_presupuesto(data.get("presupuesto") or "")
-    tipo_raw = (data.get("tipo") or "").strip().lower()
-    ambientes_raw = (data.get("ambientes") or "").strip()
-    zonas_raw = (data.get("zonas_busqueda") or "").strip()
     notas_resumidas = (data.get("notas_resumidas") or "").strip()
-    situacion = (data.get("situacion") or "").strip()
 
+    # ── Level 1: mandatory fields ──
     if not nombre:
         return False, "Nombre requerido"
-    if not re.fullmatch(r"[A-Za-zÁÉÍÓÚÜÑáéíóúüñ ]{2,80}", nombre):
+    if not re.fullmatch(r"[A-Za-zÁÉÍÓÚÜÑáéíóúüñ .'-]{2,80}", nombre):
         return False, "Nombre solo letras y espacios"
     if not telefono:
         return False, "Teléfono requerido"
     if len(telefono) < 8 or len(telefono) > 15:
         return False, "Teléfono inválido"
-    tipos = [t.strip().lower() for t in tipo_raw.split(",") if t.strip()]
-    if not tipos:
-        return False, "Seleccioná al menos un tipo"
-    for t in tipos:
-        if t not in VALID_CLIENT_TYPES:
-            return False, f"Tipo inválido: {t}"
 
-    ambientes_list: list[str] = []
-    if ambientes_raw:
-        ambientes_list = [a.strip() for a in ambientes_raw.split(",") if a.strip()]
-        if not ambientes_list:
-            return False, "Ambientes inválido"
-        for a in ambientes_list:
-            if not a.isdigit():
-                return False, "Ambientes debe ser numérico"
-            if not (1 <= int(a) <= 10):
-                return False, "Ambientes debe estar entre 1 y 10"
+    # ── Pipeline status (enum) ──
+    estado = (data.get("estado") or "nuevo_lead").strip().lower()
+    if estado not in VALID_CLIENT_ESTADOS:
+        estado = "nuevo_lead"
 
-    zonas = [z.strip().lower() for z in zonas_raw.split(",") if z.strip()]
-    if not zonas:
-        return False, "Seleccioná al menos una zona"
-    for z in zonas:
-        if z not in VALID_CLIENT_ZONAS:
-            return False, f"Zona inválida: {z}"
+    # ── Next action (enum + optional date) ──
+    proxima_accion = (data.get("proxima_accion") or "").strip().lower()
+    if proxima_accion not in VALID_CLIENT_ACCIONES:
+        proxima_accion = ""
+    proxima_accion_fecha = (data.get("proxima_accion_fecha") or "").strip()
+
+    # ── Level 2: optional structured fields ──
+    # Property types (array)
+    tipos_raw = data.get("tipos", [])
+    if isinstance(tipos_raw, str):
+        tipos_raw = [t.strip().lower() for t in tipos_raw.split(",") if t.strip()]
+    tipos = [t for t in tipos_raw if t in VALID_CLIENT_TYPES]
+
+    # Rooms (min/max)
+    ambientes_min = data.get("ambientes_min")
+    ambientes_max = data.get("ambientes_max")
+    if ambientes_min is not None:
+        try:
+            ambientes_min = max(1, min(10, int(ambientes_min)))
+        except (ValueError, TypeError):
+            ambientes_min = None
+    if ambientes_max is not None:
+        try:
+            ambientes_max = max(1, min(10, int(ambientes_max)))
+        except (ValueError, TypeError):
+            ambientes_max = None
+
+    # Zones (array)
+    zonas_raw = data.get("zonas", [])
+    if isinstance(zonas_raw, str):
+        zonas_raw = [z.strip().lower() for z in zonas_raw.split(",") if z.strip()]
+    zonas = [z for z in zonas_raw if z in VALID_CLIENT_ZONAS]
+
+    # Legacy compat fields (kept for backward compatibility)
+    tipo_legacy = ", ".join(dict.fromkeys(tipos)) if tipos else ""
+    zonas_legacy = ", ".join(zonas) if zonas else ""
+    ambientes_legacy = ""
+    if ambientes_min and ambientes_max:
+        ambientes_legacy = f"{ambientes_min}-{ambientes_max}"
+    elif ambientes_min:
+        ambientes_legacy = str(ambientes_min)
 
     return True, {
         "nombre": nombre,
         "telefono": telefono,
         "presupuesto": presupuesto,
-        "tipo": ", ".join(dict.fromkeys(tipos)),
-        "ambientes": ", ".join(dict.fromkeys(ambientes_list)),
+        "tipo": tipo_legacy,
+        "ambientes": ambientes_legacy,
         "apto_credito": bool(data.get("apto_credito")),
-        "zonas_busqueda": ", ".join(zonas),
+        "zonas_busqueda": zonas_legacy,
         "notas_resumidas": notas_resumidas,
-        "situacion": situacion,
+        "situacion": estado,  # legacy column
+        # New structured fields
+        "estado": estado,
+        "proxima_accion": proxima_accion,
+        "proxima_accion_fecha": proxima_accion_fecha,
+        "tipos": tipos,
+        "ambientes_min": ambientes_min,
+        "ambientes_max": ambientes_max,
+        "zonas": zonas,
     }
 
 
@@ -640,9 +673,10 @@ def permanent_delete_property(property_id: int):
 def list_clients():
     username = session["username"]
     search = (request.args.get("q") or "").strip()
+    estado = (request.args.get("estado") or "").strip()
     page = max(1, int(request.args.get("page") or 1))
     per_page = min(100, max(1, int(request.args.get("per_page") or 50)))
-    result = client_repo.list_clients(owner_username=username, search=search, limit=per_page, offset=(page - 1) * per_page)
+    result = client_repo.list_clients(owner_username=username, search=search, estado=estado, limit=per_page, offset=(page - 1) * per_page)
     return jsonify(result)
 
 
