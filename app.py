@@ -488,7 +488,6 @@ def stream(job_id):
 
 
 @app.route("/propiedad/<int:property_id>")
-@login_required
 def property_detail(property_id: int):
     prop = property_repo.get_property(property_id)
     if not prop:
