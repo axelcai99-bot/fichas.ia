@@ -627,7 +627,8 @@ class ScraperService:
 
         def extract_string(*keys: str, min_len: int = 1, max_len: int = 4000) -> str:
             for key in keys:
-                match = re.search(fr'"{re.escape(key)}"\s*:\s*"([^"]{{{min_len},{max_len}}})"', context, re.I)
+                # Usar (?:[^"\\]|\\.)*  para capturar strings JSON con comillas escapadas
+                match = re.search(fr'"{re.escape(key)}"\s*:\s*"((?:[^"\\\\]|\\\\.){{{min_len},{max_len}}})"', context, re.I)
                 if match:
                     value = re.sub(r"\s+", " ", ScraperService._decode_json_string(match.group(1))).strip(" ,")
                     if value:
@@ -637,7 +638,7 @@ class ScraperService:
         payload["titulo"] = extract_string("title", "postingTitle", "seoTitle", "publicationTitle", min_len=8, max_len=220)
         payload["precio"] = extract_string("formattedPrice", "priceFormatted", min_len=4, max_len=80)
         payload["ubicacion"] = extract_string("titleLocation", "locationName", "postingLocation", min_len=8, max_len=220)
-        payload["descripcion"] = extract_string("description", "descriptionText", min_len=40, max_len=6000)
+        payload["descripcion"] = extract_string("description", "descriptionText", min_len=40, max_len=12000)
 
         if not payload["ubicacion"]:
             street = extract_string("streetAddress", min_len=4, max_len=180)
@@ -795,10 +796,6 @@ class ScraperService:
             "logo", "favicon", "icon", "sprite", "placeholder",
             "watermark", "notesicon", "fav-", "fav_icon", ".svg",
             "floorplan", "planos", "plano", "staticmap", "mapa",
-            # Fotos de equipo/agencia que no son de la propiedad
-            "/equipo", "/team", "/staff", "/agencia", "/brand",
-            "/empresa", "/oficina", "/office", "/personas", "/people",
-            "/about", "/nosotros", "/quienes", "/equipo-",
         )
         image_path_tokens = (
             "/images/", "/image/", "/photos/", "/photo/",
@@ -883,7 +880,7 @@ class ScraperService:
                 if l.strip().lower() == "completa":
                     continue
                 collected.append(l)
-                if sum(len(x) for x in collected) > 2500:
+                if sum(len(x) for x in collected) > 10000:
                     break
             text_result = "\n".join(collected).strip()
             if text_result:
@@ -1256,15 +1253,7 @@ class ScraperService:
     def _clean_description(text: str) -> str:
         if not text:
             return ""
-        # Artefactos UI de ZonaProp
-        text = re.sub(r"\bN\s*Ver\s+datos\b\.?", "", text, flags=re.I)
-        text = re.sub(r"\bVer\s+datos\b\.?", "", text, flags=re.I)
-        text = re.sub(r"\bN\d{7,}\b", "", text)          # IDs tipo N1160127712
-        text = re.sub(r"(?m)^\s*N\s*$", "", text)         # Línea suelta con solo "N"
-        text = re.sub(r"\bLeer descripci[oó]n completa\b\.?", "", text, flags=re.I)
-        text = re.sub(r"\bLeer m[aá]s\b\.?", "", text, flags=re.I)
-        text = re.sub(r"\bVer m[aá]s\b\.?", "", text, flags=re.I)
-        # Firmas de inmobiliarias
+        text = re.sub(r"\bVer datos\b\.?", "", text, flags=re.I)
         text = re.sub(r"\bLEPORE SAN CRISTOBAL\b.*$", "", text, flags=re.I | re.S)
         text = re.sub(r"\bLEPORE PROPIEDADES\b.*$", "", text, flags=re.I | re.S)
         text = re.sub(r"\bAVISO LEGAL:.*$", "", text, flags=re.I | re.S)

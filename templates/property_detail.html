@@ -12,20 +12,25 @@ body{font-family:'Inter',sans-serif;background:#f5f5f5;color:#404041;-webkit-fon
 .card{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
 .gp{background:linear-gradient(135deg,#003DA5,#DC1C2E);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
 
-/* ── Carrusel ─────────────────────────────────── */
-.car-wrap{margin-bottom:12px}
-.car-row{display:flex;align-items:center;justify-content:center;gap:10px}
-.car-btn{flex-shrink:0;width:46px;height:46px;border:none;background:rgba(0,0,0,.07);border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .2s;padding:10px}
-.car-btn:hover{background:rgba(0,0,0,.16)}
-.car-btn svg{width:26px;height:26px;fill:#333}
-.car-img-box{position:relative;flex:1;border-radius:14px;overflow:hidden;box-shadow:0 4px 18px rgba(0,0,0,.22);cursor:pointer;background:#222}
-.car-img-box img{width:100%;height:480px;object-fit:cover;display:block;filter:saturate(1.15);transition:transform .3s}
-.car-img-box:hover img{transform:scale(1.02)}
-.car-counter{position:absolute;bottom:14px;right:14px;background:rgba(0,0,0,.55);color:#fff;font-size:13px;font-weight:600;padding:4px 12px;border-radius:16px;pointer-events:none}
-.car-puntos{display:flex;align-items:center;justify-content:center;gap:7px;padding:10px 0 4px}
-.car-punto{width:9px;height:9px;border-radius:50%;background:#ccc;border:none;cursor:pointer;padding:0;transition:background .2s,transform .2s;flex-shrink:0}
-.car-punto.activo{background:#003DA5;transform:scale(1.35)}
-@media(max-width:600px){.car-img-box img{height:260px}.car-btn{width:36px;height:36px;padding:7px}}
+/* ── Gallery Grid ─────────────────────────────── */
+.gallery-wrap{position:relative;margin-bottom:20px}
+.gallery-grid{display:grid;grid-template-columns:3fr 2fr;grid-template-rows:210px 210px;gap:4px;border-radius:14px;overflow:hidden;height:424px}
+.gallery-main{grid-column:1;grid-row:1/3;position:relative;overflow:hidden;cursor:pointer;background:#ddd}
+.gallery-main img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .35s}
+.gallery-main:hover img{transform:scale(1.03)}
+.gallery-smalls{grid-column:2;grid-row:1/3;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:4px}
+.gallery-small{position:relative;overflow:hidden;cursor:pointer;background:#ddd}
+.gallery-small img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .35s}
+.gallery-small:hover img{transform:scale(1.06)}
+.gallery-small-empty{background:#e8e8e8;cursor:default}
+.gallery-more-overlay{position:absolute;inset:0;background:rgba(0,0,0,.48);display:flex;align-items:center;justify-content:center;color:#fff;font-size:17px;font-weight:700;letter-spacing:.01em;pointer-events:none}
+.gallery-btn-all{position:absolute;bottom:14px;right:14px;background:rgba(255,255,255,.95);border:1.5px solid #ccc;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;color:#333;cursor:pointer;transition:background .2s,box-shadow .2s;box-shadow:0 2px 6px rgba(0,0,0,.12);font-family:inherit}
+.gallery-btn-all:hover{background:#fff;box-shadow:0 3px 10px rgba(0,0,0,.18)}
+@media(max-width:640px){
+  .gallery-grid{grid-template-columns:1fr;grid-template-rows:260px;height:260px}
+  .gallery-main{grid-row:1}
+  .gallery-smalls{display:none}
+}
 
 /* ── Layout ──────────────────────────────────── */
 .layout{display:grid;grid-template-columns:2fr 1fr;gap:20px;align-items:start}
@@ -36,36 +41,38 @@ body{font-family:'Inter',sans-serif;background:#f5f5f5;color:#404041;-webkit-fon
 }
 
 /* ── Details grid ─────────────────────────────── */
-.details-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:16px;text-align:center}
+.details-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;text-align:center}
 .detail-item{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 4px}
 .detail-icon{width:32px;height:32px;color:#003DA5}
 .detail-icon svg{width:32px;height:32px}
 .detail-label{font-size:13px;font-weight:600;color:#333;line-height:1.3}
 
 /* ── Description ──────────────────────────────── */
-.desc-text{font-size:14px;color:#505050;line-height:1.75;position:relative;overflow:hidden}
-.desc-text.collapsed{max-height:200px}
-.desc-toggle{display:inline-block;margin-top:8px;font-size:13px;font-weight:600;color:#003DA5;cursor:pointer;border:none;background:none;padding:0}
+.desc-text{font-size:14px;color:#505050;line-height:1.8;position:relative;overflow:hidden}
+.desc-text p{margin-bottom:14px;white-space:pre-line}
+.desc-text.collapsed{max-height:420px}
+.desc-fade{position:absolute;bottom:0;left:0;right:0;height:60px;background:linear-gradient(transparent,#fff);pointer-events:none}
+.desc-text:not(.collapsed) .desc-fade{display:none}
+.desc-toggle{display:inline-block;margin-top:10px;font-size:13px;font-weight:600;color:#003DA5;cursor:pointer;border:none;background:none;padding:0}
 .desc-toggle:hover{text-decoration:underline}
 
 /* ── Fullscreen Modal ─────────────────────────── */
-.modal{display:none;position:fixed;inset:0;background:#000;z-index:9999;flex-direction:column}
+.modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:9999;flex-direction:column;align-items:center;justify-content:center}
 .modal.open{display:flex}
-.modal-close{position:fixed;top:14px;right:18px;background:rgba(255,255,255,.13);border:none;color:#fff;font-size:26px;width:42px;height:42px;border-radius:50%;cursor:pointer;z-index:10001;display:flex;align-items:center;justify-content:center;transition:background .2s;backdrop-filter:blur(4px)}
-.modal-close:hover{background:rgba(255,255,255,.24)}
-.modal-nav{position:fixed;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.15);border:none;color:#fff;width:50px;height:50px;border-radius:50%;cursor:pointer;z-index:10001;backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;transition:background .2s}
-.modal-nav svg{width:26px;height:26px;fill:#fff}
-.modal-nav:hover{background:rgba(255,255,255,.28)}
-.modal-nav.prev{left:14px}
-.modal-nav.next{right:14px}
-.modal-img-wrap{flex:1;min-height:0;overflow:hidden;padding:52px 72px 6px}
-#modal-img{width:100%;height:100%;object-fit:contain;display:block}
-.modal-counter{color:rgba(255,255,255,.85);font-size:14px;font-weight:600;text-align:center;padding:6px 0 2px;flex-shrink:0}
-.modal-strip{display:flex;gap:6px;padding:6px 4px 10px;overflow-x:auto;justify-content:center;max-width:100%;scrollbar-width:none;flex-shrink:0}
+.modal-close{position:fixed;top:16px;right:20px;background:rgba(255,255,255,.12);border:none;color:white;font-size:28px;width:44px;height:44px;border-radius:50%;cursor:pointer;z-index:10001;display:flex;align-items:center;justify-content:center;transition:background .2s;backdrop-filter:blur(4px)}
+.modal-close:hover{background:rgba(255,255,255,.22)}
+.modal-nav{position:fixed;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.14);border:none;color:white;font-size:32px;width:52px;height:52px;border-radius:50%;cursor:pointer;z-index:10001;backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;transition:background .2s;line-height:1}
+.modal-nav:hover{background:rgba(255,255,255,.26)}
+.modal-nav.prev{left:16px}
+.modal-nav.next{right:16px}
+.modal-img-wrap{display:flex;align-items:center;justify-content:center;width:100%;flex:1;min-height:0;padding:10px 70px}
+#modal-img{max-width:100%;max-height:88vh;object-fit:contain;border-radius:6px;display:block}
+.modal-counter{color:rgba(255,255,255,.85);font-size:14px;font-weight:600;padding:8px 0 2px;letter-spacing:.04em;flex-shrink:0}
+.modal-strip{display:flex;gap:6px;padding:0 4px 10px;overflow-x:auto;max-width:92vw;scrollbar-width:none;flex-shrink:0}
 .modal-strip::-webkit-scrollbar{display:none}
-.modal-thumb{width:60px;height:44px;border-radius:5px;object-fit:cover;cursor:pointer;opacity:.45;border:2px solid transparent;flex-shrink:0;transition:opacity .2s,border-color .2s}
+.modal-thumb{width:64px;height:46px;border-radius:5px;object-fit:cover;cursor:pointer;opacity:.5;border:2px solid transparent;flex-shrink:0;transition:opacity .2s,border-color .2s}
 .modal-thumb.active{opacity:1;border-color:#fff}
-.modal-thumb:hover{opacity:.8}
+.modal-thumb:hover{opacity:.85}
 </style>
 </head>
 <body>
@@ -77,32 +84,43 @@ body{font-family:'Inter',sans-serif;background:#f5f5f5;color:#404041;-webkit-fon
     <p class="gp" style="font-size:clamp(22px,4vw,30px);font-weight:800">{{ prop.precio }}</p>
   </div>
 
-  <!-- Carrusel -->
-  <div class="car-wrap">
-    <div class="car-row">
-      <!-- Flecha atrás -->
-      <button class="car-btn" id="car-atras" onclick="carNav(-1)" title="Anterior">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><path d="M20 44 0 24 20 4l2.8 2.85L5.65 24 22.8 41.15Z"/></svg>
-      </button>
-      <!-- Imagen principal -->
-      <div class="car-img-box" onclick="openModal(carIdx)">
-        <img id="car-img" src="" alt="Foto" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22400%22 height=%22300%22><rect fill=%22%23333%22 width=%22400%22 height=%22300%22/></svg>'">
-        <div class="car-counter" id="car-counter"></div>
+  <!-- Gallery Grid: 1 large + 4 small -->
+  <div class="gallery-wrap">
+    <div class="gallery-grid">
+      <!-- Main large photo -->
+      <div class="gallery-main" onclick="openModal(0)">
+        {% if images %}
+        <img src="{{ images[0] }}" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22400%22 height=%22300%22><rect fill=%22%23ddd%22 width=%22400%22 height=%22300%22/></svg>'" alt="Foto 1">
+        {% endif %}
       </div>
-      <!-- Flecha adelante -->
-      <button class="car-btn" id="car-adelante" onclick="carNav(1)" title="Siguiente">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><path d="m15.2 43.9-2.8-2.85L29.55 23.9 12.4 6.75l2.8-2.85 20 20Z"/></svg>
-      </button>
+      <!-- 2×2 small photos -->
+      <div class="gallery-smalls">
+        {% for i in range(1, 5) %}
+        {% if i < images|length %}
+        <div class="gallery-small" onclick="openModal({{ i }})">
+          <img src="{{ images[i] }}" onerror="this.parentElement.style.background='#e0e0e0';this.remove()" alt="Foto {{ i+1 }}">
+          {% if i == 4 and images|length > 5 %}
+          <div class="gallery-more-overlay">+{{ images|length - 5 }} fotos</div>
+          {% endif %}
+        </div>
+        {% else %}
+        <div class="gallery-small gallery-small-empty"></div>
+        {% endif %}
+        {% endfor %}
+      </div>
     </div>
-    <!-- Puntos indicadores -->
-    <div class="car-puntos" id="car-puntos"></div>
+    {% if images|length > 1 %}
+    <button class="gallery-btn-all" onclick="openModal(0)">
+      &#9632;&nbsp; Ver todas las fotos ({{ images|length }})
+    </button>
+    {% endif %}
   </div>
 
   <!-- Main Layout: 2fr / 1fr -->
   <div class="layout">
     <div>
       <!-- Detalles de la propiedad -->
-      {% if detalles.ambientes or detalles.banos or detalles.metros_totales or detalles.metros_cubiertos or detalles.dormitorios or prop.info_adicional.antiguedad %}
+      {% if detalles.ambientes or detalles.banos or detalles.metros_totales or detalles.metros_cubiertos or detalles.dormitorios %}
       <div class="card" style="margin-bottom:16px">
         <p style="font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#949CA1;margin-bottom:16px">Detalles de la propiedad</p>
         <div class="details-grid">
@@ -146,14 +164,6 @@ body{font-family:'Inter',sans-serif;background:#f5f5f5;color:#404041;-webkit-fon
             <span class="detail-label">{{ detalles.metros_cubiertos }} m² cub.</span>
           </div>
           {% endif %}
-          {% if prop.info_adicional.antiguedad %}
-          <div class="detail-item">
-            <div class="detail-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-            </div>
-            <span class="detail-label">{{ prop.info_adicional.antiguedad }}</span>
-          </div>
-          {% endif %}
         </div>
       </div>
       {% endif %}
@@ -163,8 +173,9 @@ body{font-family:'Inter',sans-serif;background:#f5f5f5;color:#404041;-webkit-fon
         <p style="font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#949CA1;margin-bottom:14px">Descripción</p>
         <div class="desc-text collapsed" id="desc-text">
           {% for p in descripcion_parts %}
-          <p style="margin-bottom:12px">{{ p }}</p>
+          <p>{{ p }}</p>
           {% endfor %}
+          <div class="desc-fade" id="desc-fade"></div>
         </div>
         <button class="desc-toggle" id="desc-toggle" onclick="toggleDesc()">Mostrar más</button>
       </div>
@@ -189,12 +200,21 @@ body{font-family:'Inter',sans-serif;background:#f5f5f5;color:#404041;-webkit-fon
           Ya visitaste la propiedad?
         </a>
         {% endif %}
-        {% if prop.info_adicional.expensas %}
+
+        {% if prop.info_adicional.antiguedad or prop.info_adicional.expensas %}
         <div style="margin-top:14px">
+          {% if prop.info_adicional.antiguedad %}
+          <div style="display:flex;justify-content:space-between;padding:10px 0;border-top:1px solid #f0f0f0">
+            <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:#949CA1">Antigüedad</span>
+            <span style="font-size:12px;font-weight:700;color:#404041">{{ prop.info_adicional.antiguedad }}</span>
+          </div>
+          {% endif %}
+          {% if prop.info_adicional.expensas %}
           <div style="display:flex;justify-content:space-between;padding:10px 0;border-top:1px solid #f0f0f0">
             <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:#949CA1">Expensas</span>
             <span style="font-size:12px;font-weight:700;color:#404041">{{ prop.info_adicional.expensas }}</span>
           </div>
+          {% endif %}
         </div>
         {% endif %}
       </div>
@@ -212,14 +232,10 @@ body{font-family:'Inter',sans-serif;background:#f5f5f5;color:#404041;-webkit-fon
 </div>
 
 <!-- Fullscreen Modal -->
-<div id="modal" class="modal" onclick="if(event.target===this)closeModal()">
+<div id="modal" class="modal" onclick="if(event.target===this||event.target.id==='modal')closeModal()">
   <button class="modal-close" onclick="closeModal()" title="Cerrar">&times;</button>
-  <button class="modal-nav prev" id="btn-prev" onclick="event.stopPropagation();modalNav(-1)">
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><path d="M20 44 0 24 20 4l2.8 2.85L5.65 24 22.8 41.15Z"/></svg>
-  </button>
-  <button class="modal-nav next" id="btn-next" onclick="event.stopPropagation();modalNav(1)">
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><path d="m15.2 43.9-2.8-2.85L29.55 23.9 12.4 6.75l2.8-2.85 20 20Z"/></svg>
-  </button>
+  <button class="modal-nav prev" id="btn-prev" onclick="event.stopPropagation();modalNav(-1)">&#8249;</button>
+  <button class="modal-nav next" id="btn-next" onclick="event.stopPropagation();modalNav(1)">&#8250;</button>
   <div class="modal-img-wrap" onclick="event.stopPropagation()">
     <img id="modal-img" src="" alt="Foto">
   </div>
@@ -229,21 +245,8 @@ body{font-family:'Inter',sans-serif;background:#f5f5f5;color:#404041;-webkit-fon
 
 <script>
 var IMAGES = {{ images|tojson }};
-var carIdx = 0;
 var modalIdx = 0;
 var total = IMAGES.length;
-
-/* ── Build carousel dots ── */
-(function(){
-  var puntos = document.getElementById('car-puntos');
-  IMAGES.forEach(function(_, i){
-    var btn = document.createElement('button');
-    btn.className = 'car-punto' + (i===0 ? ' activo' : '');
-    btn.title = 'Foto ' + (i+1);
-    btn.onclick = function(){ carGo(i); };
-    puntos.appendChild(btn);
-  });
-})();
 
 /* ── Build modal thumbnail strip ── */
 (function(){
@@ -251,32 +254,11 @@ var total = IMAGES.length;
   IMAGES.forEach(function(src, i){
     var img = document.createElement('img');
     img.src = src;
-    img.className = 'modal-thumb' + (i===0 ? ' active' : '');
-    img.alt = 'Foto ' + (i+1);
+    img.className = 'modal-thumb' + (i===0?' active':'');
+    img.alt = 'Foto '+(i+1);
     img.onerror = function(){ this.style.display='none'; };
     img.onclick = function(){ openModal(i); };
     strip.appendChild(img);
-  });
-})();
-
-/* ── Carousel ── */
-function carUpdate(){
-  document.getElementById('car-img').src = IMAGES[carIdx] || '';
-  document.getElementById('car-counter').textContent = (carIdx+1) + ' / ' + total;
-  document.querySelectorAll('.car-punto').forEach(function(p,i){ p.classList.toggle('activo', i===carIdx); });
-}
-function carNav(dir){ carIdx = (carIdx + dir + total) % total; carUpdate(); }
-function carGo(i){ carIdx = i; carUpdate(); }
-carUpdate();
-
-/* ── Touch swipe en carrusel ── */
-(function(){
-  var box = document.getElementById('car-img').parentElement;
-  var sx = 0;
-  box.addEventListener('touchstart', function(e){ sx = e.touches[0].clientX; }, {passive:true});
-  box.addEventListener('touchend', function(e){
-    var d = sx - e.changedTouches[0].clientX;
-    if(Math.abs(d) > 40) carNav(d > 0 ? 1 : -1);
   });
 })();
 
@@ -292,13 +274,14 @@ function updateModal(){
   document.getElementById('photo-counter').textContent = (modalIdx+1) + ' / ' + total;
   document.getElementById('btn-prev').style.visibility = modalIdx > 0 ? 'visible' : 'hidden';
   document.getElementById('btn-next').style.visibility = modalIdx < total-1 ? 'visible' : 'hidden';
-  document.querySelectorAll('.modal-thumb').forEach(function(t,i){ t.classList.toggle('active', i===modalIdx); });
-  var th = document.querySelectorAll('.modal-thumb')[modalIdx];
-  if(th) th.scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'});
+  /* sync thumbnail strip */
+  var thumbs = document.querySelectorAll('.modal-thumb');
+  thumbs.forEach(function(t,i){ t.classList.toggle('active', i===modalIdx); });
+  if(thumbs[modalIdx]) thumbs[modalIdx].scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'});
 }
 function modalNav(dir){
-  var n = modalIdx + dir;
-  if(n >= 0 && n < total){ modalIdx = n; updateModal(); }
+  var next = modalIdx + dir;
+  if(next >= 0 && next < total){ modalIdx = next; updateModal(); }
 }
 function closeModal(){
   document.getElementById('modal').classList.remove('open');
@@ -307,20 +290,20 @@ function closeModal(){
 
 /* ── Keyboard ── */
 document.addEventListener('keydown', function(e){
-  var open = document.getElementById('modal').classList.contains('open');
-  if(e.key==='Escape' && open){ closeModal(); return; }
-  if(e.key==='ArrowLeft'){ open ? modalNav(-1) : carNav(-1); }
-  if(e.key==='ArrowRight'){ open ? modalNav(1) : carNav(1); }
+  if(!document.getElementById('modal').classList.contains('open')) return;
+  if(e.key==='Escape') closeModal();
+  if(e.key==='ArrowLeft') modalNav(-1);
+  if(e.key==='ArrowRight') modalNav(1);
 });
 
 /* ── Touch swipe en modal ── */
 (function(){
   var modal = document.getElementById('modal');
-  var sx = 0;
-  modal.addEventListener('touchstart', function(e){ sx = e.touches[0].clientX; }, {passive:true});
+  var startX = 0;
+  modal.addEventListener('touchstart', function(e){ startX = e.touches[0].clientX; }, {passive:true});
   modal.addEventListener('touchend', function(e){
-    var d = sx - e.changedTouches[0].clientX;
-    if(Math.abs(d) > 40) modalNav(d > 0 ? 1 : -1);
+    var diff = startX - e.changedTouches[0].clientX;
+    if(Math.abs(diff) > 50) modalNav(diff > 0 ? 1 : -1);
   });
 })();
 
@@ -328,13 +311,26 @@ document.addEventListener('keydown', function(e){
 function toggleDesc(){
   var el = document.getElementById('desc-text');
   var btn = document.getElementById('desc-toggle');
-  if(el.classList.contains('collapsed')){ el.classList.remove('collapsed'); btn.textContent = 'Mostrar menos'; }
-  else { el.classList.add('collapsed'); btn.textContent = 'Mostrar más'; }
+  var fade = document.getElementById('desc-fade');
+  if(el.classList.contains('collapsed')){
+    el.classList.remove('collapsed');
+    btn.textContent = 'Mostrar menos';
+    if(fade) fade.style.display = 'none';
+  } else {
+    el.classList.add('collapsed');
+    btn.textContent = 'Mostrar más';
+    if(fade) fade.style.display = '';
+  }
 }
 (function(){
   var el = document.getElementById('desc-text');
   var btn = document.getElementById('desc-toggle');
-  if(el && el.scrollHeight <= 200){ btn.style.display='none'; el.classList.remove('collapsed'); }
+  var fade = document.getElementById('desc-fade');
+  if(el && el.scrollHeight <= 420){
+    btn.style.display = 'none';
+    el.classList.remove('collapsed');
+    if(fade) fade.style.display = 'none';
+  }
 })();
 </script>
 </body>

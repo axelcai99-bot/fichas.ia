@@ -488,6 +488,7 @@ def stream(job_id):
 
 
 @app.route("/propiedad/<int:property_id>")
+@login_required
 def property_detail(property_id: int):
     prop = property_repo.get_property(property_id)
     if not prop:
@@ -511,7 +512,9 @@ def property_detail(property_id: int):
     images = [_build_image_src(image, prop.get("source_url", "")) for image in images]
 
     descripcion = prop.get("descripcion", "") or ""
-    descripcion_parts = [p.strip() for p in descripcion.split("\n") if p.strip()] or [descripcion]
+    # Dividir por párrafos (doble salto de línea) para respetar la estructura original.
+    # Los saltos simples dentro de un párrafo se preservan con white-space:pre-line en el CSS.
+    descripcion_parts = [p.strip() for p in re.split(r"\n{2,}", descripcion) if p.strip()] or [descripcion]
     wa_msg = urllib.parse.quote(
         f"Hola {prop.get('agent_name', '')}, te contacto por la propiedad: {prop.get('titulo', '')} - {prop.get('ubicacion', '')}"
     )
