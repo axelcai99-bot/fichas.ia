@@ -552,7 +552,7 @@ def property_detail(property_id: int):
 
     # Si sólo hay 1 imagen local (descarga probablemente fallida) y tenemos
     # URLs originales del scraping, usamos esas como fallback directo.
-    if len(image_paths) <= 1 and len(source_image_urls) > 1:
+    if source_image_urls and len(image_paths) != len(source_image_urls):
         images = source_image_urls
     elif image_paths:
         images = image_paths
