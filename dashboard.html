@@ -1,0 +1,1646 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FichasIA — Panel</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600;700&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #0c0c0c;
+  --surface:   #141414;
+  --surface2:  #1a1a1a;
+  --border:    #222;
+  --border2:   #2c2c2c;
+  --text:      #e8e2d9;
+  --muted:     #666;
+  --muted2:    #333;
+  --accent:    #c9392c;
+  --blue:      #1e4aab;
+  --blue-soft: rgba(30,74,171,0.14);
+  --gold:      #c9a96e;
+  --gold-soft: rgba(201,169,110,0.12);
+  --acc-soft:  rgba(201,57,44,0.14);
+  --green:     #25D366;
+  --sidebar:   240px;
+}
+
+html { height: 100%; }
+
+body {
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+  display: flex;
+}
+
+/* ══════════ SIDEBAR ══════════ */
+.sidebar {
+  width: var(--sidebar);
+  min-width: var(--sidebar);
+  max-width: var(--sidebar);
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  overflow-y: auto;
+  flex-shrink: 0;
+  transition: transform .25s cubic-bezier(.22,1,.36,1);
+  z-index: 100;
+}
+
+.sb-brand {
+  display: flex; align-items: center; gap: 10px;
+  padding: 22px 20px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.sb-icon {
+  width: 30px; height: 30px;
+  background: var(--accent);
+  border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'DM Serif Display', serif;
+  font-size: 16px; color: var(--text); flex-shrink: 0;
+}
+
+.sb-name {
+  font-family: 'DM Serif Display', serif;
+  font-size: 18px; color: var(--text);
+  letter-spacing: -0.02em;
+}
+
+.sb-body { flex: 1; padding: 8px 10px; overflow-y: auto; }
+
+.sb-section {
+  font-size: 10px; font-weight: 600;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--muted2); padding: 14px 10px 6px;
+}
+
+.nav-btn {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 9px 12px;
+  border: none; background: none;
+  color: var(--muted);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13.5px; font-weight: 400;
+  border-radius: 6px; cursor: pointer;
+  transition: all .15s; text-align: left;
+  margin-bottom: 1px;
+}
+
+.nav-btn:hover { background: var(--surface2); color: var(--text); }
+.nav-btn.active {
+  background: var(--blue-soft);
+  color: #7fa0e8;
+  font-weight: 500;
+}
+
+.nav-icon { font-size: 14px; flex-shrink: 0; }
+
+.sb-footer {
+  border-top: 1px solid var(--border);
+  padding: 14px 16px;
+  display: flex; align-items: center; gap: 10px;
+  flex-shrink: 0;
+}
+
+.user-av {
+  width: 30px; height: 30px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), #8a2c07);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 600; color: var(--text); flex-shrink: 0;
+}
+
+.user-meta { flex: 1; min-width: 0; }
+.user-name  { font-size: 12.5px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.user-role  { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-top: 1px; }
+
+.logout-btn {
+  background: none; border: none;
+  color: var(--muted); cursor: pointer;
+  font-size: 16px; padding: 5px; border-radius: 4px;
+  transition: color .15s; text-decoration: none;
+  display: flex; align-items: center; flex-shrink: 0;
+}
+.logout-btn:hover { color: var(--accent); }
+
+/* ══════════ MOBILE OVERLAY ══════════ */
+.sidebar-overlay {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.65);
+  z-index: 99;
+}
+
+/* ══════════ MAIN ══════════ */
+.main {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column;
+  min-height: 100vh;
+}
+
+.topbar {
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  padding: 14px 24px;
+  flex-shrink: 0;
+  display: flex; align-items: center; gap: 14px;
+}
+
+.hamburger {
+  display: none;
+  background: none; border: none;
+  color: var(--muted); cursor: pointer;
+  font-size: 20px; padding: 4px;
+  flex-shrink: 0;
+}
+
+.topbar-titles { flex: 1; min-width: 0; }
+
+.page-title {
+  font-family: 'DM Serif Display', serif;
+  font-size: 20px; color: var(--text);
+  letter-spacing: -0.02em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.page-sub {
+  font-size: 12px; color: var(--muted); margin-top: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.content {
+  flex: 1; padding: 24px 24px;
+  width: 100%;
+}
+
+/* ══════════ PANELES ══════════ */
+.panel { display: none; width: 100%; }
+.panel.active { display: block; animation: fadeIn .2s ease; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+/* ══════════ CARD ══════════ */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 22px;
+  margin-bottom: 14px;
+  width: 100%;
+}
+
+.card-label {
+  display: block;
+  font-size: 10px; font-weight: 600;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--muted);
+  padding-bottom: 14px; margin-bottom: 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* ══════════ FORM ══════════ */
+.field-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px; margin-bottom: 12px;
+}
+.field-grid.one { grid-template-columns: 1fr; }
+
+.field { display: flex; flex-direction: column; gap: 6px; }
+
+.field-label {
+  font-size: 11px; font-weight: 500;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--muted);
+}
+
+.input {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border2);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px; font-weight: 400;
+  padding: 10px 13px;
+  outline: none;
+  transition: border-color .2s, box-shadow .2s;
+}
+.input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(30,74,171,.12); }
+.input::placeholder { color: #3d2a14; }
+
+/* ══════════ CHIP CHECKBOXES ══════════ */
+.chip-check { cursor:pointer; }
+.chip-check input { display:none; }
+.chip-label {
+  display:inline-block; padding:6px 14px;
+  border-radius:20px; font-size:12px; font-weight:500;
+  background:var(--surface2); border:1px solid var(--border2);
+  color:var(--muted); transition:all .15s; user-select:none;
+}
+.chip-check input:checked + .chip-label {
+  background:var(--blue-soft); border-color:rgba(30,74,171,.4);
+  color:#7fa0e8; font-weight:600;
+}
+.chip-label:hover { border-color:var(--muted2); }
+
+/* ══════════ CLIENT CARD (pipeline) ══════════ */
+.cl-card {
+  display:grid; grid-template-columns:1fr auto;
+  gap:8px 16px; align-items:center;
+  padding:14px 18px; border-radius:8px;
+  background:var(--surface2); border:1px solid var(--border);
+  transition:border-color .15s; cursor:pointer;
+}
+.cl-card:hover { border-color:var(--muted2); }
+.cl-name { font-weight:600; font-size:14px; color:var(--text); }
+.cl-phone { font-size:12px; color:var(--muted); margin-left:10px; }
+.cl-meta { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:4px; }
+.cl-badge {
+  display:inline-block; padding:3px 10px; border-radius:12px;
+  font-size:10px; font-weight:600; letter-spacing:.04em; text-transform:uppercase;
+}
+.cl-badge-lead { background:rgba(30,74,171,.18); color:#7fa0e8; }
+.cl-badge-contactado { background:rgba(201,169,110,.18); color:var(--gold); }
+.cl-badge-visito { background:rgba(139,92,246,.18); color:#a78bfa; }
+.cl-badge-negociando { background:rgba(245,158,11,.18); color:#f59e0b; }
+.cl-badge-cerrado { background:rgba(16,185,129,.18); color:#10b981; }
+.cl-badge-perdido { background:rgba(239,68,68,.18); color:#ef4444; }
+.cl-action-tag {
+  display:inline-flex; align-items:center; gap:4px; padding:3px 9px;
+  border-radius:12px; font-size:10px; font-weight:500;
+  background:var(--acc-soft); color:var(--accent);
+}
+.cl-detail { font-size:11px; color:var(--muted); }
+.cl-actions { display:flex; gap:6px; justify-self:end; }
+
+.url-input {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px; padding: 13px 16px;
+  outline: none;
+  transition: border-color .25s, box-shadow .25s;
+  margin-bottom: 16px;
+}
+.url-input:focus { border-color: var(--blue); box-shadow: 0 0 0 4px rgba(30,74,171,.12); }
+.url-input::placeholder { color: #3d2a14; font-size: 13px; }
+
+/* ══════════ BOTONES ══════════ */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 10px 20px; border-radius: 7px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13.5px; font-weight: 500;
+  cursor: pointer; border: none; transition: all .15s;
+}
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+
+.btn-primary { background: var(--blue); color: white; }
+.btn-primary:hover:not(:disabled) { background: #2454c7; transform: translateY(-1px); box-shadow: 0 4px 14px rgba(191,61,11,.35); }
+
+.btn-ghost { background: var(--surface2); color: var(--text); border: 1px solid var(--border2); }
+.btn-ghost:hover { background: var(--border); }
+
+.btn-danger {
+  background: rgba(201,57,44,0.16);
+  color: #ff9a92;
+  border: 1px solid rgba(201,57,44,0.35);
+}
+.btn-danger:hover:not(:disabled) { background: rgba(201,57,44,0.25); }
+
+.btn-green { background: var(--green); color: white; }
+.btn-green:hover:not(:disabled) { background: #1aab50; transform: translateY(-1px); }
+
+.btn-full { width: 100%; padding: 14px; font-size: 15px; font-weight: 600; margin-top: 8px; }
+.btn-row  { display: flex; gap: 10px; flex-wrap: wrap; }
+
+/* ══════════ LOG ══════════ */
+.log-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.log-title { font-size: 12.5px; font-weight: 500; }
+.log-box {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: 'Courier New', monospace;
+  font-size: 12px; color: #4ade80;
+  padding: 14px 16px; height: 200px;
+  overflow-y: auto; white-space: pre-wrap; line-height: 1.7;
+}
+
+/* ══════════ RESULTADO ══════════ */
+.result-box {
+  background: rgba(30,74,171,0.07);
+  border: 1px solid rgba(30,74,171,0.2);
+  border-radius: 7px; padding: 14px 16px; margin-bottom: 14px;
+}
+.result-lbl  { font-size: 11px; color: var(--muted); margin-bottom: 5px; }
+.result-link { color: #7fa0e8; font-size: 13px; word-break: break-all; }
+
+/* ══════════ SPINNER ══════════ */
+.spinner {
+  border: 2px solid var(--border2);
+  border-top-color: var(--blue);
+  border-radius: 50%; width: 14px; height: 14px;
+  animation: spin .7s linear infinite; flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ══════════ TABLA USUARIOS ══════════ */
+.admin-head { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 20px; gap: 12px; }
+.admin-head h2 { font-family: 'DM Serif Display', serif; font-size: 20px; color: var(--text); }
+.admin-head p  { font-size: 12px; color: var(--muted); margin-top: 3px; }
+
+.user-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.user-table th { text-align: left; font-size: 10px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); padding: 0 12px 12px; border-bottom: 1px solid var(--border); }
+.user-table td { padding: 13px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.user-table tr:last-child td { border-bottom: none; }
+.user-table tr:hover td { background: rgba(255,255,255,.015); }
+
+.badge { display: inline-flex; align-items: center; font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; }
+.badge-admin  { background: var(--gold-soft); color: var(--gold); }
+.badge-user   { background: rgba(30,74,171,0.15); color: #7fa0e8; }
+.badge-active { background: rgba(37,211,102,.12); color: #4ade80; }
+.badge-off    { background: rgba(255,255,255,.04); color: var(--muted); }
+
+/* ══════════ MISC ══════════ */
+.note { font-size: 11.5px; color: var(--muted); line-height: 1.5; margin-top: 5px; }
+.note a { color: var(--gold); }
+.divider { height: 1px; background: var(--border); margin: 20px 0; }
+.mb-3 { margin-bottom: 12px; }
+.mb-4 { margin-bottom: 16px; }
+.mt-4 { margin-top: 16px; }
+
+/* ══════════ MODAL ══════════ */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.8); z-index: 200;
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+  opacity: 0; pointer-events: none; transition: opacity .2s;
+}
+.modal-overlay.open { opacity: 1; pointer-events: all; }
+.modal-box {
+  background: var(--surface); border: 1px solid var(--border2);
+  border-radius: 10px; width: 100%; max-width: 420px;
+  padding: 28px; animation: fadeIn .2s ease;
+}
+.modal-title { font-family: 'DM Serif Display', serif; font-size: 20px; color: var(--text); margin-bottom: 20px; }
+
+/* ══════════ TOAST ══════════ */
+.toast {
+  position: fixed; bottom: 24px; right: 24px; z-index: 500;
+  background: var(--surface); border: 1px solid var(--border2); border-radius: 7px;
+  padding: 13px 18px; font-size: 13px; color: var(--text);
+  display: flex; align-items: center; gap: 10px;
+  box-shadow: 0 8px 32px rgba(0,0,0,.6);
+  transform: translateY(80px); opacity: 0;
+  transition: all .3s cubic-bezier(.22,1,.36,1); min-width: 200px;
+}
+.toast.show { transform: translateY(0); opacity: 1; }
+.toast.ok  { border-left: 3px solid #4ade80; }
+.toast.err { border-left: 3px solid var(--accent); }
+
+/* ══════════ RESPONSIVE MOBILE ══════════ */
+@media (max-width: 768px) {
+  body { display: block; }
+
+  .sidebar {
+    position: fixed; top: 0; left: 0; bottom: 0;
+    transform: translateX(-100%);
+    z-index: 100;
+  }
+  .sidebar.open { transform: translateX(0); }
+  .sidebar-overlay.show { display: block; }
+
+  .main { margin-left: 0; min-height: 100vh; }
+
+  .hamburger { display: flex; }
+
+  .content { padding: 16px; }
+
+  .field-grid { grid-template-columns: 1fr; }
+
+  .topbar { padding: 12px 16px; }
+
+  .page-title { font-size: 17px; }
+
+  .btn-full { font-size: 14px; padding: 13px; }
+
+  .user-table { font-size: 12px; }
+  .user-table th, .user-table td { padding: 10px 8px; }
+
+  .admin-head { flex-direction: column; }
+  .admin-head .btn { width: 100%; justify-content: center; }
+
+  .toast { left: 16px; right: 16px; bottom: 16px; min-width: 0; }
+}
+</style>
+</head>
+<body>
+
+<!-- ══════ OVERLAY MOBILE ══════ -->
+<div class="sidebar-overlay" id="sb-overlay" onclick="closeSidebar()"></div>
+
+<!-- ══════════════════ SIDEBAR ══════════════════ -->
+<aside class="sidebar" id="sidebar">
+  <div class="sb-brand">
+    <div class="sb-icon">F</div>
+    <div class="sb-name">FichasIA</div>
+  </div>
+
+  <div class="sb-body">
+    <div class="sb-section">Herramientas</div>
+    <button class="nav-btn active" onclick="showPanel('generar', this)">
+      <span class="nav-icon">🏠</span> Generar ficha
+    </button>
+    <button class="nav-btn" onclick="showPanel('propiedades', this); cargarPropiedadesActivas()">
+      <span class="nav-icon">📋</span> Propiedades activas
+    </button>
+
+    <div class="sb-section">Cuenta</div>
+    <button class="nav-btn" onclick="showPanel('clientes', this); cargarClientes()">
+      <span class="nav-icon">🗂️</span> Clientes
+    </button>
+    <button class="nav-btn" onclick="showPanel('papelera', this); cargarPapelera()">
+      <span class="nav-icon">🗑️</span> Papelera
+    </button>
+    <button class="nav-btn" onclick="showPanel('perfil', this)">
+      <span class="nav-icon">⚙️</span> Mi perfil
+    </button>
+    <button class="nav-btn" onclick="showPanel('pass', this)">
+      <span class="nav-icon">🔑</span> Contraseña
+    </button>
+
+    {% if is_admin %}
+    <div class="sb-section">Admin</div>
+    <button class="nav-btn" onclick="showPanel('usuarios', this); cargarUsuarios()">
+      <span class="nav-icon">👥</span> Usuarios
+    </button>
+    {% endif %}
+  </div>
+
+  <div class="sb-footer">
+    <div class="user-av">{{ (user.nombre or username)[0].upper() }}</div>
+    <div class="user-meta">
+      <div class="user-name">{{ user.nombre or username }}</div>
+      <div class="user-role">{{ user.role }}</div>
+    </div>
+    <a href="/logout" class="logout-btn" title="Cerrar sesión">↩</a>
+  </div>
+</aside>
+
+<!-- ══════════════════ MAIN ══════════════════ -->
+<div class="main">
+  <div class="topbar">
+    <button class="hamburger" id="hamburger" onclick="toggleSidebar()">☰</button>
+    <div class="topbar-titles">
+      <div class="page-title" id="page-title">Generador de Fichas</div>
+      <div class="page-sub"   id="page-sub">Pegá el link y en minutos tenés la ficha lista</div>
+    </div>
+  </div>
+
+  <div class="content">
+
+    <!-- ── GENERAR ─────────────────────────────────────── -->
+    <div class="panel active" id="panel-generar">
+
+      <div class="card">
+        <span class="card-label">Link de la propiedad</span>
+        <input class="url-input" id="url" type="url"
+               placeholder="">
+
+        <div class="field-grid mb-3">
+          <div class="field">
+            <span class="field-label">Tu nombre</span>
+            <input class="input" id="g_nombre" type="text"
+                   value="{{ user.nombre or '' }}" placeholder="">
+          </div>
+          <div class="field">
+            <span class="field-label">WhatsApp (sin +)</span>
+            <input class="input" id="g_whatsapp" type="text"
+                   value="{{ user.whatsapp or '' }}" placeholder="">
+          </div>
+        </div>
+
+        <div class="field-grid one mb-3">
+          <div class="field">
+            <span class="field-label">Google Form (encuesta post-visita)</span>
+            <input class="input" id="g_form" type="url"
+                   value="{{ user.form_url or '' }}" placeholder="">
+          </div>
+        </div>
+
+        <button class="btn btn-primary btn-full" id="btn-generar" onclick="generarFicha()">
+          🚀 Generar Ficha Ahora
+        </button>
+      </div>
+
+      <div class="card" id="log-card" style="display:none">
+        <div class="log-head">
+          <div class="spinner" id="log-spinner"></div>
+          <span class="log-title" id="log-status">Procesando...</span>
+        </div>
+        <div class="log-box" id="log-box"></div>
+      </div>
+
+      <div class="card" id="result-card" style="display:none">
+        <span class="card-label">🎉 Ficha lista para compartir</span>
+        <div class="result-box">
+          <div class="result-lbl">Link de la ficha:</div>
+          <a id="result-link" href="#" target="_blank" class="result-link"></a>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-ghost" id="btn-copiar" onclick="copiarLink()">📋 Copiar link</button>
+          <button class="btn btn-green" onclick="abrirWpp()">💬 WhatsApp</button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ── PROPIEDADES ACTIVAS ─────────────────────────── -->
+    <div class="panel" id="panel-propiedades">
+      <div class="card" id="active-properties-card">
+        <div class="admin-head" style="margin-bottom:12px">
+          <div>
+            <span class="card-label" style="padding-bottom:0;margin-bottom:0;border-bottom:none">Propiedades activas</span>
+            <p class="note">Fichas disponibles actualmente en el sistema local</p>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <select class="input" id="portal-filter" style="min-width:170px;padding:8px 10px" onchange="cargarPropiedadesActivas()">
+              <option value="">Todos los portales</option>
+            </select>
+            <button class="btn btn-ghost" style="padding:8px 12px" onclick="cargarPropiedadesActivas()">Recargar</button>
+          </div>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="user-table">
+            <thead>
+              <tr>
+                <th>N°</th>
+                <th>Propiedad</th>
+                <th>Portal</th>
+                <th>Precio</th>
+                <th>Ubicación</th>
+                <th>Creada</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="properties-body">
+              <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:24px">Cargando propiedades...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div id="prop-pagination" style="display:flex;align-items:center;gap:8px;justify-content:center;margin-top:12px"></div>
+      </div>
+    </div>
+
+    <!-- ── CLIENTES ───────────────────────────────────── -->
+    <div class="panel" id="panel-clientes">
+      <!-- ═══ Listado de clientes ═══ -->
+      <div id="clientes-listado">
+        <div class="card">
+          <div class="admin-head" style="margin-bottom:12px">
+            <div>
+              <span class="card-label" style="padding-bottom:0;margin-bottom:0;border-bottom:none">Pipeline de clientes</span>
+              <p class="note">Gestión comercial y seguimiento</p>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <input class="input" id="client-search" type="text" placeholder="Buscar nombre, zona, tipo..." style="min-width:180px;padding:8px 10px" oninput="clientSearchDebounce()">
+              <select class="input" id="client-filter-estado" style="width:auto;min-width:140px;padding:8px 10px" onchange="clientPage=1;cargarClientes()">
+                <option value="">Todos los estados</option>
+                <option value="nuevo_lead">Nuevo lead</option>
+                <option value="contactado">Contactado</option>
+                <option value="visito_propiedad">Visitó propiedad</option>
+                <option value="negociando">Negociando</option>
+                <option value="cerrado">Cerrado</option>
+                <option value="perdido">Perdido</option>
+              </select>
+              <button class="btn btn-primary" style="padding:8px 14px" onclick="mostrarFormCliente()">+ Nuevo cliente</button>
+            </div>
+          </div>
+          <div id="clients-cards" style="display:flex;flex-direction:column;gap:10px">
+            <div style="text-align:center;color:var(--muted);padding:24px">Sin datos todavía</div>
+          </div>
+          <div id="client-pagination" style="display:flex;align-items:center;gap:8px;justify-content:center;margin-top:12px"></div>
+        </div>
+      </div>
+
+      <!-- ═══ Formulario two-level ═══ -->
+      <div id="clientes-form" style="display:none">
+        <div class="card" style="margin-bottom:14px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+            <span class="card-label" style="padding-bottom:0;margin-bottom:0;border-bottom:none" id="form-cliente-titulo">Nuevo cliente</span>
+            <button class="btn btn-ghost" style="padding:6px 12px;font-size:12px" onclick="volverListadoClientes()">← Volver al listado</button>
+          </div>
+
+          <!-- LEVEL 1: Quick create (mandatory) -->
+          <p style="font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);margin-bottom:10px">Datos básicos</p>
+          <div class="field-grid" style="margin-bottom:16px">
+            <div class="field"><span class="field-label">Nombre *</span><input class="input" id="c_nombre" type="text" placeholder="Nombre y apellido" oninput="normalizarNombreCliente(this)"></div>
+            <div class="field"><span class="field-label">Teléfono *</span><input class="input" id="c_telefono" type="text" inputmode="numeric" placeholder="1155667788" oninput="normalizarTelefonoCliente(this)"></div>
+          </div>
+
+          <!-- PIPELINE: Estado + Próxima acción -->
+          <p style="font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);margin-bottom:10px">Pipeline</p>
+          <div class="field-grid" style="margin-bottom:16px">
+            <div class="field"><span class="field-label">Estado</span>
+              <select class="input" id="c_estado">
+                <option value="nuevo_lead">Nuevo lead</option>
+                <option value="contactado">Contactado</option>
+                <option value="visito_propiedad">Visitó propiedad</option>
+                <option value="negociando">Negociando</option>
+                <option value="cerrado">Cerrado</option>
+                <option value="perdido">Perdido</option>
+              </select>
+            </div>
+            <div class="field"><span class="field-label">Próxima acción</span>
+              <select class="input" id="c_proxima_accion">
+                <option value="">Sin acción pendiente</option>
+                <option value="llamar">Llamar</option>
+                <option value="enviar_propiedades">Enviar propiedades</option>
+                <option value="coordinar_visita">Coordinar visita</option>
+                <option value="seguimiento">Seguimiento</option>
+              </select>
+            </div>
+            <div class="field" id="c_fecha_wrap" style="display:none"><span class="field-label">Fecha de acción</span><input class="input" id="c_proxima_accion_fecha" type="date"></div>
+          </div>
+
+          <div style="margin-bottom:16px">
+            <button class="btn btn-primary" id="btn-cliente-guardar" onclick="guardarCliente()">Guardar cliente</button>
+          </div>
+
+          <!-- LEVEL 2: Expandable details -->
+          <div style="border-top:1px solid var(--border);padding-top:14px">
+            <button type="button" id="toggle-level2" class="btn btn-ghost" style="padding:6px 12px;font-size:12px;width:100%;text-align:left" onclick="toggleLevel2()">
+              ▼ Agregar más información
+            </button>
+            <div id="level2-fields" style="display:none;margin-top:14px">
+              <!-- Presupuesto + Apto crédito -->
+              <p style="font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:10px">Presupuesto</p>
+              <div class="field-grid" style="margin-bottom:16px">
+                <div class="field"><span class="field-label">Presupuesto USD</span><input class="input" id="c_presupuesto" type="text" inputmode="numeric" placeholder="100.000" oninput="normalizarPresupuestoCliente(this)"></div>
+                <div class="field"><span class="field-label">Apto crédito</span>
+                  <select class="input" id="c_apto_credito">
+                    <option value="">No especificado</option>
+                    <option value="si">Sí</option>
+                    <option value="no">No</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Tipo + Ambientes -->
+              <p style="font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:10px">Búsqueda</p>
+              <div class="field-grid" style="margin-bottom:16px">
+                <div class="field"><span class="field-label">Tipo de propiedad</span>
+                  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
+                    <label class="chip-check"><input type="checkbox" name="c_tipo" value="depto"><span class="chip-label">Depto</span></label>
+                    <label class="chip-check"><input type="checkbox" name="c_tipo" value="ph"><span class="chip-label">PH</span></label>
+                    <label class="chip-check"><input type="checkbox" name="c_tipo" value="casa"><span class="chip-label">Casa</span></label>
+                    <label class="chip-check"><input type="checkbox" name="c_tipo" value="otro"><span class="chip-label">Otro</span></label>
+                  </div>
+                </div>
+                <div class="field"><span class="field-label">Ambientes</span>
+                  <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
+                    <select class="input" id="c_ambientes_min" style="width:auto;min-width:70px">
+                      <option value="">Min</option>
+                      <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+                      <option value="4">4</option><option value="5">5</option><option value="6">6+</option>
+                    </select>
+                    <span style="color:var(--muted)">a</span>
+                    <select class="input" id="c_ambientes_max" style="width:auto;min-width:70px">
+                      <option value="">Max</option>
+                      <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+                      <option value="4">4</option><option value="5">5</option><option value="6">6+</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Zonas -->
+              <p style="font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:10px">Zonas</p>
+              <div class="field-grid one" style="margin-bottom:16px">
+                <div class="field">
+                  <input class="input" id="c_zonas_search" type="text" placeholder="Escribí una zona..." oninput="renderZonasSugeridas(this.value)">
+                  <div id="c_zonas_sugeridas" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"></div>
+                  <div id="c_zonas_selected" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"></div>
+                </div>
+              </div>
+
+              <!-- Notas -->
+              <p style="font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:10px">Notas</p>
+              <div class="field-grid one" style="margin-bottom:8px">
+                <div class="field"><textarea class="input" id="c_notas_resumidas" rows="3" placeholder="Observaciones clave del cliente..."></textarea></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── PAPELERA ────────────────────────────────────── -->
+    <div class="panel" id="panel-papelera">
+      <div class="card" style="margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <span class="card-label" style="margin:0">Propiedades eliminadas</span>
+          <button class="btn btn-ghost" style="padding:6px 12px;font-size:12px;color:var(--error)" onclick="vaciarTodosPropiedades()">Vaciar papelera</button>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="user-table">
+            <thead><tr><th>Propiedad</th><th>Portal</th><th>Precio</th><th>Eliminada</th><th>Acciones</th></tr></thead>
+            <tbody id="trash-props-body">
+              <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px">Sin elementos</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <span class="card-label" style="margin:0">Clientes eliminados</span>
+          <button class="btn btn-ghost" style="padding:6px 12px;font-size:12px;color:var(--error)" onclick="vaciarTodosClientes()">Vaciar papelera</button>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="user-table">
+            <thead><tr><th>Nombre</th><th>Teléfono</th><th>Tipo</th><th>Zonas</th><th>Acciones</th></tr></thead>
+            <tbody id="trash-clients-body">
+              <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px">Sin elementos</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── PERFIL ──────────────────────────────────────── -->
+    <div class="panel" id="panel-perfil">
+      <div class="card" style="max-width:580px">
+        <span class="card-label">Datos del agente</span>
+        <div class="field-grid mb-3">
+          <div class="field">
+            <span class="field-label">Nombre completo</span>
+            <input class="input" id="p_nombre" type="text"
+                   value="{{ user.nombre or '' }}" placeholder="">
+          </div>
+          <div class="field">
+            <span class="field-label">WhatsApp (sin +)</span>
+            <input class="input" id="p_whatsapp" type="text"
+                   value="{{ user.whatsapp or '' }}" placeholder="">
+          </div>
+        </div>
+
+        <div class="field-grid one mb-4">
+          <div class="field">
+            <span class="field-label">Google Form (encuesta post-visita)</span>
+            <input class="input" id="p_form" type="url"
+                   value="{{ user.form_url or '' }}" placeholder="">
+            <p class="note">Se incluye como botón en cada ficha generada</p>
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="guardarPerfil()">Guardar cambios</button>
+      </div>
+    </div>
+
+    <!-- ── CONTRASEÑA ──────────────────────────────────── -->
+    <div class="panel" id="panel-pass">
+      <div class="card" style="max-width:440px">
+        <span class="card-label">Cambiar contraseña</span>
+        <div class="field mb-3">
+          <span class="field-label">Contraseña actual</span>
+          <input class="input" id="pw_actual" type="password" placeholder="••••••••">
+        </div>
+        <div class="field mb-3">
+          <span class="field-label">Contraseña nueva</span>
+          <input class="input" id="pw_nueva" type="password" placeholder="Mínimo 6 caracteres">
+        </div>
+        <div class="field mb-4">
+          <span class="field-label">Confirmar nueva</span>
+          <input class="input" id="pw_confirmar" type="password" placeholder="••••••••">
+        </div>
+        <button class="btn btn-primary" onclick="cambiarPassword()">Actualizar contraseña</button>
+      </div>
+    </div>
+
+    <!-- ── USUARIOS (admin) ───────────────────────────── -->
+    {% if is_admin %}
+    <div class="panel" id="panel-usuarios">
+      <div class="admin-head" style="justify-content:flex-start">
+        <button class="btn btn-primary" onclick="abrirModalCrear()">+ Nuevo usuario</button>
+      </div>
+      <div class="card" style="overflow-x:auto">
+        <table class="user-table">
+          <thead>
+            <tr>
+              <th>Agente</th>
+              <th>Usuario</th>
+              <th>Rol</th>
+              <th>Estado</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="users-body">
+            <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:32px">Cargando...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+
+<!-- ══════════════ MODALES ══════════════ -->
+{% if is_admin %}
+<div class="modal-overlay" id="modal-crear">
+  <div class="modal-box">
+    <div class="modal-title">Nuevo usuario</div>
+    <div class="field mb-3">
+      <span class="field-label">Nombre completo</span>
+      <input class="input" id="new_nombre" type="text" placeholder="Christian González">
+    </div>
+    <div class="field mb-3">
+      <span class="field-label">Usuario (para login)</span>
+      <input class="input" id="new_user" type="text" placeholder="christiang" autocomplete="off">
+    </div>
+    <div class="field mb-4">
+      <span class="field-label">Contraseña inicial</span>
+      <input class="input" id="new_pass" type="password" placeholder="Mínimo 6 caracteres" autocomplete="off">
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="crearUsuario()">Crear cuenta</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-reset">
+  <div class="modal-box">
+    <div class="modal-title">Resetear contraseña</div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:16px">
+      Nueva contraseña para <strong id="reset-label" style="color:var(--text)"></strong>
+    </p>
+    <div class="field mb-4">
+      <span class="field-label">Nueva contraseña</span>
+      <input class="input" id="reset_pass" type="password" placeholder="Mínimo 6 caracteres">
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="cerrarModalReset()">Cancelar</button>
+      <button class="btn btn-primary" onclick="confirmarReset()">Guardar</button>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<div class="toast" id="toast"></div>
+
+<script>
+const CSRF_TOKEN = {{ csrf_token()|tojson }};
+function csrfHeaders(extra) {
+  return Object.assign({'Content-Type':'application/json', 'X-CSRF-Token': CSRF_TOKEN}, extra || {});
+}
+let currentUrl = null;
+let resetTarget = null;
+let editingClientId = null;
+let CLIENTS_CACHE = [];
+let propPage = 1, propTotal = 0, propPerPage = 20;
+let clientPage = 1, clientTotal = 0, clientPerPage = 50;
+const CURRENT_USERNAME = {{ username|tojson }};
+
+const PANELS = {
+  generar:  ['Generador de Fichas',  'Pegá el link y en minutos tenés la ficha lista'],
+  propiedades: ['Propiedades activas', 'Listado de fichas generadas en local'],
+  clientes: ['Clientes', 'Agenda y seguimiento comercial'],
+  papelera: ['Papelera', 'Elementos eliminados recientemente'],
+  perfil:   ['Mi Perfil',            'Configurá tus datos de contacto'],
+  pass:     ['Contraseña',           'Actualizá tu contraseña de acceso'],
+  usuarios: ['Usuarios',             'Gestioná las cuentas de tus agentes'],
+};
+const ZONAS_OPTIONS = [
+  'agronomia','almagro','balvanera','barracas','belgrano','boedo','caballito','chacarita','coghlan','colegiales',
+  'constitucion','flores','floresta','la boca','la paternal','liniers','mataderos','monserrat','monte castro',
+  'nunez','palermo','parque avellaneda','parque chacabuco','parque chas','parque patricios','puerto madero',
+  'recoleta','retiro','saavedra','san cristobal','san nicolas','san telmo','velez sarsfield','versalles',
+  'villa crespo','villa del parque','villa devoto','villa general mitre','villa lugano','villa luro',
+  'villa ortuzar','villa pueyrredon','villa real','villa riachuelo','villa santa rita','villa soldati','villa urquiza',
+  'olivos','vicente lopez','la lucila','martinez','san isidro','acassuso','beccar','munro','florida','carapachay','villa adelina'
+];
+const ZONAS_SELECTED = new Set();
+
+/* ── Sidebar mobile ──────────────── */
+function toggleSidebar() {
+  const sb = document.getElementById('sidebar');
+  const ov = document.getElementById('sb-overlay');
+  sb.classList.toggle('open');
+  ov.classList.toggle('show');
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sb-overlay').classList.remove('show');
+}
+
+/* ── Paneles ──────────────────────── */
+function showPanel(id, btn) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  const el = document.getElementById('panel-' + id);
+  if (el) el.classList.add('active');
+  if (btn) btn.classList.add('active');
+  const m = PANELS[id];
+  if (m) {
+    document.getElementById('page-title').textContent = m[0];
+    document.getElementById('page-sub').textContent   = m[1];
+  }
+  closeSidebar();
+}
+
+/* ── Toast ────────────────────────── */
+function toast(msg, type = 'ok') {
+  const el = document.getElementById('toast');
+  el.textContent = (type === 'ok' ? '✓  ' : '✗  ') + msg;
+  el.className = `toast ${type} show`;
+  setTimeout(() => el.classList.remove('show'), 3500);
+}
+
+/* ── Generar ──────────────────────── */
+async function generarFicha() {
+  const url = document.getElementById('url').value.trim();
+  if (!url) { toast('Pegá el link de la propiedad primero', 'err'); return; }
+  const btn = document.getElementById('btn-generar');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner" style="border-top-color:#fefad7;width:16px;height:16px"></div> Procesando...';
+  document.getElementById('log-card').style.display    = 'block';
+  document.getElementById('result-card').style.display = 'none';
+  document.getElementById('log-box').textContent       = '';
+  document.getElementById('log-spinner').style.display = 'block';
+  document.getElementById('log-status').textContent    = 'Procesando...';
+  try {
+    const res = await fetch('/api/generar', {
+      method: 'POST',
+      headers: csrfHeaders(),
+      body: JSON.stringify({
+        url,
+        nombre:   document.getElementById('g_nombre').value.trim(),
+        whatsapp: document.getElementById('g_whatsapp').value.trim(),
+        form_url: document.getElementById('g_form').value.trim(),
+      }),
+    });
+    if (!res.ok) { toast('Error al iniciar el proceso', 'err'); resetBtn(); return; }
+    const { job_id } = await res.json();
+    escucharLogs(job_id);
+  } catch(e) { toast('Error de red', 'err'); resetBtn(); }
+}
+
+function escucharLogs(jobId) {
+  const logBox = document.getElementById('log-box');
+  const es = new EventSource(`/api/stream/${jobId}`);
+  es.addEventListener('message', e => {
+    logBox.textContent += e.data + '\n';
+    logBox.scrollTop = logBox.scrollHeight;
+  });
+  es.addEventListener('done', e => {
+    es.close();
+    document.getElementById('log-spinner').style.display = 'none';
+    document.getElementById('log-status').textContent = '✓ Completado';
+    resetBtn();
+    const url = e.data.trim();
+    if (url) {
+      currentUrl = url;
+      document.getElementById('result-link').textContent = url;
+      document.getElementById('result-link').href = url;
+      document.getElementById('result-card').style.display = 'block';
+      document.getElementById('result-card').scrollIntoView({ behavior: 'smooth' });
+      cargarPropiedadesActivas();
+    }
+  });
+  es.addEventListener('failed', e => {
+    es.close();
+    const errMsg = (e && e.data ? e.data : 'Error inesperado');
+    logBox.textContent += `\n❌ ${errMsg}\n`;
+    document.getElementById('log-spinner').style.display = 'none';
+    document.getElementById('log-status').textContent = '✗ Error';
+    toast(errMsg, 'err');
+    resetBtn();
+  });
+  es.addEventListener('error', () => {
+    es.close();
+    logBox.textContent += '\n❌ Error de conexión con el servidor\n';
+    document.getElementById('log-spinner').style.display = 'none';
+    document.getElementById('log-status').textContent = '✗ Error';
+    toast('Se perdió la conexión con el servidor', 'err');
+    resetBtn();
+  });
+}
+
+function resetBtn() {
+  const btn = document.getElementById('btn-generar');
+  btn.disabled = false;
+  btn.innerHTML = '🚀 Generar Ficha Ahora';
+}
+
+function copiarLink() {
+  if (!currentUrl) return;
+  navigator.clipboard.writeText(currentUrl).then(() => {
+    const btn = document.getElementById('btn-copiar');
+    btn.textContent = '✓ Copiado';
+    setTimeout(() => btn.textContent = '📋 Copiar link', 2000);
+  });
+}
+
+function abrirWpp() {
+  if (!currentUrl) return;
+  const nombre = document.getElementById('g_nombre').value.trim() || 'Tu asesor';
+  const msg = `¡Hola! 👋 Te comparto la ficha:\n\n🏠 ${currentUrl}\n\nSaludos, ${nombre}`;
+  window.open(`https://web.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
+}
+
+/* ── Portales dinámicos ───────────── */
+async function cargarPortales() {
+  const sel = document.getElementById('portal-filter');
+  if (!sel) return;
+  const prev = sel.value;
+  try {
+    const res = await fetch('/api/portales');
+    if (!res.ok) return;
+    const portals = await res.json();
+    sel.innerHTML = '<option value="">Todos los portales</option>';
+    portals.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p;
+      opt.textContent = p.charAt(0).toUpperCase() + p.slice(1);
+      sel.appendChild(opt);
+    });
+    if (prev && portals.includes(prev)) sel.value = prev;
+  } catch (e) { /* silent */ }
+}
+
+/* ── Propiedades activas ───────────── */
+async function cargarPropiedadesActivas(page) {
+  if (page !== undefined) propPage = page;
+  cargarPortales();
+  const tbody = document.getElementById('properties-body');
+  if (!tbody) return;
+  try {
+    const portal = document.getElementById('portal-filter')?.value || '';
+    let q = `?page=${propPage}&per_page=${propPerPage}`;
+    if (portal) q += `&portal=${encodeURIComponent(portal)}`;
+    const res = await fetch('/propiedades' + q);
+    if (!res.ok) throw new Error('error');
+    const data = await res.json();
+    const props = data.items || [];
+    propTotal = data.total || 0;
+    if (!props.length) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:24px">No hay propiedades activas todavía</td></tr>';
+      renderPropPagination();
+      return;
+    }
+    const startNum = propTotal - ((propPage - 1) * propPerPage);
+    tbody.innerHTML = props.map((p, idx) => {
+      const date = new Date(p.created_at);
+      const dateLabel = isNaN(date.getTime()) ? '-' : date.toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' });
+      const portal = p.source_portal || '-';
+      return `
+        <tr>
+          <td>${startNum - idx}</td>
+          <td><a href="/propiedad/${p.id}" target="_blank" style="color:#7fa0e8;text-decoration:none">${p.titulo || 'Sin título'}</a></td>
+          <td style="text-transform:capitalize">${portal}</td>
+          <td>${p.precio || '-'}</td>
+          <td>${p.ubicacion || '-'}</td>
+          <td>${dateLabel}</td>
+          <td>
+            <button class="btn btn-danger" style="padding:6px 10px;font-size:12px" onclick="eliminarPropiedad(${p.id})">🗑</button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+    renderPropPagination();
+  } catch (e) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:24px">No se pudo cargar la lista</td></tr>';
+  }
+}
+
+function renderPropPagination() {
+  const box = document.getElementById('prop-pagination');
+  if (!box) return;
+  const totalPages = Math.ceil(propTotal / propPerPage);
+  if (totalPages <= 1) { box.innerHTML = ''; return; }
+  let html = `<span style="font-size:12px;color:var(--muted)">${propTotal} propiedades</span> `;
+  if (propPage > 1) html += `<button class="btn btn-ghost" style="padding:4px 10px;font-size:12px" onclick="cargarPropiedadesActivas(${propPage-1})">← Ant</button> `;
+  html += `<span style="font-size:12px;color:var(--text)">${propPage} / ${totalPages}</span> `;
+  if (propPage < totalPages) html += `<button class="btn btn-ghost" style="padding:4px 10px;font-size:12px" onclick="cargarPropiedadesActivas(${propPage+1})">Sig →</button>`;
+  box.innerHTML = html;
+}
+
+async function eliminarPropiedad(id) {
+  const ok = confirm('¿Mover esta propiedad a la papelera?');
+  if (!ok) return;
+  try {
+    const res = await fetch(`/api/propiedades/${id}`, { method: 'DELETE', headers: csrfHeaders() });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      toast(data.error || 'No se pudo borrar la propiedad', 'err');
+      return;
+    }
+    toast('Propiedad movida a papelera');
+    cargarPropiedadesActivas();
+  } catch (e) {
+    toast('Error de red al eliminar', 'err');
+  }
+}
+
+/* ── Clientes: búsqueda ──────────── */
+let _clientSearchTimer = null;
+function clientSearchDebounce() {
+  clearTimeout(_clientSearchTimer);
+  _clientSearchTimer = setTimeout(() => { clientPage = 1; cargarClientes(); }, 350);
+}
+
+/* ── Estado labels & badge classes ─── */
+const ESTADO_LABELS = {
+  nuevo_lead:'Nuevo lead', contactado:'Contactado', visito_propiedad:'Visitó propiedad',
+  negociando:'Negociando', cerrado:'Cerrado', perdido:'Perdido'
+};
+const ESTADO_BADGE = {
+  nuevo_lead:'cl-badge-lead', contactado:'cl-badge-contactado', visito_propiedad:'cl-badge-visito',
+  negociando:'cl-badge-negociando', cerrado:'cl-badge-cerrado', perdido:'cl-badge-perdido'
+};
+const ACCION_LABELS = {
+  llamar:'Llamar', enviar_propiedades:'Enviar propiedades',
+  coordinar_visita:'Coordinar visita', seguimiento:'Seguimiento'
+};
+
+/* ── Clientes: navegación ─────────── */
+function mostrarFormCliente() {
+  limpiarFormularioCliente();
+  document.getElementById('form-cliente-titulo').textContent = 'Nuevo cliente';
+  document.getElementById('clientes-listado').style.display = 'none';
+  document.getElementById('clientes-form').style.display = 'block';
+}
+
+function volverListadoClientes() {
+  document.getElementById('clientes-form').style.display = 'none';
+  document.getElementById('clientes-listado').style.display = 'block';
+  limpiarFormularioCliente();
+}
+
+function toggleLevel2() {
+  const fields = document.getElementById('level2-fields');
+  const btn = document.getElementById('toggle-level2');
+  if (!fields) return;
+  const open = fields.style.display !== 'none';
+  fields.style.display = open ? 'none' : 'block';
+  btn.textContent = open ? '▼ Agregar más información' : '▲ Ocultar información adicional';
+}
+
+/* ── Input normalizers ────────────── */
+function normalizarNombreCliente(input) {
+  input.value = (input.value || '').replace(/[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ .'-]/g, '').replace(/\s+/g, ' ');
+}
+function normalizarTelefonoCliente(input) {
+  input.value = (input.value || '').replace(/\D/g, '');
+}
+function normalizarPresupuestoCliente(input) {
+  const digits = (input.value || '').replace(/\D/g, '');
+  if (!digits) { input.value = ''; return; }
+  input.value = digits.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+}
+
+/* ── Próxima acción: show/hide date ── */
+document.addEventListener('change', function(e) {
+  if (e.target && e.target.id === 'c_proxima_accion') {
+    document.getElementById('c_fecha_wrap').style.display = e.target.value ? 'flex' : 'none';
+  }
+});
+
+/* ── Zonas (tags) ─────────────────── */
+function renderZonasSugeridas(filter) {
+  const q = (filter || '').trim().toLowerCase();
+  const box = document.getElementById('c_zonas_sugeridas');
+  if (!box) return;
+  if (!q) { box.innerHTML = ''; return; }
+  const items = ZONAS_OPTIONS.filter(z => z.includes(q) && !ZONAS_SELECTED.has(z)).slice(0, 14);
+  box.innerHTML = items.map(z =>
+    `<button type="button" class="btn btn-ghost" style="padding:5px 9px;font-size:12px" onclick="agregarZonaBusqueda('${z}')">${z}</button>`
+  ).join('');
+}
+function renderZonasSeleccionadas() {
+  const box = document.getElementById('c_zonas_selected');
+  if (!box) return;
+  box.innerHTML = Array.from(ZONAS_SELECTED).map(z =>
+    `<span class="badge badge-user" style="gap:6px">${z} <button type="button" style="background:none;border:none;color:inherit;cursor:pointer" onclick="quitarZonaBusqueda('${z}')">✕</button></span>`
+  ).join('');
+}
+function agregarZonaBusqueda(zona) {
+  if (!zona) return;
+  ZONAS_SELECTED.add(zona.toLowerCase());
+  renderZonasSeleccionadas();
+  const searchEl = document.getElementById('c_zonas_search');
+  if (searchEl) { searchEl.value = ''; }
+  renderZonasSugeridas('');
+}
+function quitarZonaBusqueda(zona) {
+  ZONAS_SELECTED.delete((zona || '').toLowerCase());
+  renderZonasSeleccionadas();
+  renderZonasSugeridas(document.getElementById('c_zonas_search')?.value || '');
+}
+
+/* ── Build payload ────────────────── */
+function _payloadCliente() {
+  const tipos = Array.from(document.querySelectorAll('input[name="c_tipo"]:checked')).map(el => el.value);
+  const zonas = Array.from(ZONAS_SELECTED);
+  const ambMin = document.getElementById('c_ambientes_min')?.value || '';
+  const ambMax = document.getElementById('c_ambientes_max')?.value || '';
+  return {
+    nombre: document.getElementById('c_nombre').value.trim(),
+    telefono: document.getElementById('c_telefono').value.trim(),
+    presupuesto: document.getElementById('c_presupuesto')?.value?.trim() || '',
+    tipos: tipos,
+    ambientes_min: ambMin ? parseInt(ambMin) : null,
+    ambientes_max: ambMax ? parseInt(ambMax) : null,
+    apto_credito: document.getElementById('c_apto_credito')?.value === 'si',
+    zonas: zonas,
+    notas_resumidas: document.getElementById('c_notas_resumidas')?.value?.trim() || '',
+    estado: document.getElementById('c_estado')?.value || 'nuevo_lead',
+    proxima_accion: document.getElementById('c_proxima_accion')?.value || '',
+    proxima_accion_fecha: document.getElementById('c_proxima_accion_fecha')?.value || '',
+  };
+}
+
+function limpiarFormularioCliente() {
+  editingClientId = null;
+  document.getElementById('btn-cliente-guardar').textContent = 'Guardar cliente';
+  ['c_nombre','c_telefono','c_presupuesto','c_notas_resumidas','c_zonas_search','c_proxima_accion_fecha']
+    .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  document.querySelectorAll('input[name="c_tipo"]').forEach(el => { el.checked = false; });
+  document.getElementById('c_estado').value = 'nuevo_lead';
+  document.getElementById('c_proxima_accion').value = '';
+  document.getElementById('c_fecha_wrap').style.display = 'none';
+  document.getElementById('c_ambientes_min').value = '';
+  document.getElementById('c_ambientes_max').value = '';
+  document.getElementById('c_apto_credito').value = '';
+  ZONAS_SELECTED.clear();
+  renderZonasSeleccionadas();
+  renderZonasSugeridas('');
+  // Collapse level 2
+  document.getElementById('level2-fields').style.display = 'none';
+  document.getElementById('toggle-level2').textContent = '▼ Agregar más información';
+}
+
+async function guardarCliente() {
+  const payload = _payloadCliente();
+  if (!payload.nombre) { toast('Nombre requerido', 'err'); return; }
+  if (!/^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ .'-]+$/.test(payload.nombre)) { toast('Nombre solo letras', 'err'); return; }
+  if (!payload.telefono || !/^\d{8,15}$/.test(payload.telefono)) { toast('Teléfono solo números (8 a 15)', 'err'); return; }
+  const url = editingClientId ? `/api/clientes/${editingClientId}` : '/api/clientes';
+  const method = editingClientId ? 'PUT' : 'POST';
+  const res = await fetch(url, { method, headers: csrfHeaders(), body: JSON.stringify(payload) });
+  if (res.ok) {
+    toast(editingClientId ? 'Cliente actualizado' : 'Cliente creado');
+    limpiarFormularioCliente();
+    cargarClientes();
+    volverListadoClientes();
+  } else {
+    const d = await res.json().catch(() => ({}));
+    toast(d.error || 'Error al guardar cliente', 'err');
+  }
+}
+
+async function cargarClientes(page) {
+  if (page !== undefined) clientPage = page;
+  const container = document.getElementById('clients-cards');
+  if (!container) return;
+  const searchVal = document.getElementById('client-search')?.value?.trim() || '';
+  const estadoFilter = document.getElementById('client-filter-estado')?.value || '';
+  let q = `?page=${clientPage}&per_page=${clientPerPage}`;
+  if (searchVal) q += `&q=${encodeURIComponent(searchVal)}`;
+  if (estadoFilter) q += `&estado=${encodeURIComponent(estadoFilter)}`;
+  const res = await fetch('/api/clientes' + q);
+  if (!res.ok) {
+    container.innerHTML = '<div style="text-align:center;color:var(--muted);padding:24px">No se pudo cargar</div>';
+    return;
+  }
+  const data = await res.json();
+  const clients = data.items || [];
+  clientTotal = data.total || 0;
+  CLIENTS_CACHE = clients;
+  if (!CLIENTS_CACHE.length) {
+    container.innerHTML = '<div style="text-align:center;color:var(--muted);padding:24px">Sin clientes todavía</div>';
+    renderClientPagination();
+    return;
+  }
+  container.innerHTML = CLIENTS_CACHE.map((c, idx) => {
+    const estado = c.estado || 'nuevo_lead';
+    const estadoLabel = ESTADO_LABELS[estado] || estado;
+    const estadoBadge = ESTADO_BADGE[estado] || 'cl-badge-lead';
+    const accion = c.proxima_accion ? (ACCION_LABELS[c.proxima_accion] || c.proxima_accion) : '';
+    const accionFecha = c.proxima_accion_fecha || '';
+    const tipos = (c.tipos && c.tipos.length) ? c.tipos.map(t => t.charAt(0).toUpperCase()+t.slice(1)).join(', ') : '';
+    const zonas = (c.zonas && c.zonas.length) ? c.zonas.map(z => z.charAt(0).toUpperCase()+z.slice(1)).join(', ') : '';
+    const ambStr = c.ambientes_min ? (c.ambientes_max && c.ambientes_max !== c.ambientes_min ? `${c.ambientes_min}-${c.ambientes_max} amb` : `${c.ambientes_min} amb`) : '';
+    let metaItems = [];
+    if (tipos) metaItems.push(`<span class="cl-detail">${tipos}</span>`);
+    if (ambStr) metaItems.push(`<span class="cl-detail">${ambStr}</span>`);
+    if (c.presupuesto) metaItems.push(`<span class="cl-detail">USD ${c.presupuesto}</span>`);
+    if (zonas) metaItems.push(`<span class="cl-detail">${zonas}</span>`);
+    return `<div class="cl-card" onclick="editarCliente(${idx})">
+      <div>
+        <div><span class="cl-name">${c.nombre || '-'}</span><span class="cl-phone">${c.telefono || ''}</span></div>
+        <div class="cl-meta">
+          <span class="cl-badge ${estadoBadge}">${estadoLabel}</span>
+          ${accion ? `<span class="cl-action-tag">${accion}${accionFecha ? ' · '+accionFecha : ''}</span>` : ''}
+          ${metaItems.length ? '<span style="color:var(--muted2)">·</span>' + metaItems.join('<span style="color:var(--muted2);margin:0 2px">·</span>') : ''}
+        </div>
+      </div>
+      <div class="cl-actions" onclick="event.stopPropagation()">
+        <button class="btn btn-ghost" style="padding:5px 10px;font-size:11px" onclick="editarCliente(${idx})">Editar</button>
+        <button class="btn btn-danger" style="padding:5px 10px;font-size:11px" onclick="eliminarCliente(${c.id})">Borrar</button>
+      </div>
+    </div>`;
+  }).join('');
+  renderClientPagination();
+}
+
+function renderClientPagination() {
+  const box = document.getElementById('client-pagination');
+  if (!box) return;
+  const totalPages = Math.ceil(clientTotal / clientPerPage);
+  if (totalPages <= 1) { box.innerHTML = `<span style="font-size:12px;color:var(--muted)">${clientTotal} clientes</span>`; return; }
+  let html = `<span style="font-size:12px;color:var(--muted)">${clientTotal} clientes</span> `;
+  if (clientPage > 1) html += `<button class="btn btn-ghost" style="padding:4px 10px;font-size:12px" onclick="cargarClientes(${clientPage-1})">← Ant</button> `;
+  html += `<span style="font-size:12px;color:var(--text)">${clientPage} / ${totalPages}</span> `;
+  if (clientPage < totalPages) html += `<button class="btn btn-ghost" style="padding:4px 10px;font-size:12px" onclick="cargarClientes(${clientPage+1})">Sig →</button>`;
+  box.innerHTML = html;
+}
+
+function editarCliente(idx) {
+  const c = CLIENTS_CACHE[idx];
+  if (!c) return;
+  editingClientId = c.id;
+  document.getElementById('btn-cliente-guardar').textContent = 'Actualizar cliente';
+  document.getElementById('form-cliente-titulo').textContent = 'Editar cliente';
+  document.getElementById('c_nombre').value = c.nombre || '';
+  document.getElementById('c_telefono').value = c.telefono || '';
+  // Pipeline
+  document.getElementById('c_estado').value = c.estado || 'nuevo_lead';
+  document.getElementById('c_proxima_accion').value = c.proxima_accion || '';
+  document.getElementById('c_proxima_accion_fecha').value = c.proxima_accion_fecha || '';
+  document.getElementById('c_fecha_wrap').style.display = c.proxima_accion ? 'flex' : 'none';
+  // Level 2 — auto-expand if has data
+  const tiposArr = c.tipos || [];
+  const zonasArr = c.zonas || [];
+  const hasLevel2 = c.presupuesto || tiposArr.length || (c.ambientes_min) || zonasArr.length || c.notas_resumidas;
+  document.getElementById('c_presupuesto').value = c.presupuesto || '';
+  document.getElementById('c_apto_credito').value = c.apto_credito ? 'si' : (c.apto_credito === false ? 'no' : '');
+  document.querySelectorAll('input[name="c_tipo"]').forEach(el => { el.checked = tiposArr.includes(el.value); });
+  document.getElementById('c_ambientes_min').value = c.ambientes_min || '';
+  document.getElementById('c_ambientes_max').value = c.ambientes_max || '';
+  ZONAS_SELECTED.clear();
+  zonasArr.forEach(z => ZONAS_SELECTED.add(z));
+  renderZonasSeleccionadas();
+  renderZonasSugeridas('');
+  document.getElementById('c_notas_resumidas').value = c.notas_resumidas || '';
+  // Show level 2 if has data
+  if (hasLevel2) {
+    document.getElementById('level2-fields').style.display = 'block';
+    document.getElementById('toggle-level2').textContent = '▲ Ocultar información adicional';
+  } else {
+    document.getElementById('level2-fields').style.display = 'none';
+    document.getElementById('toggle-level2').textContent = '▼ Agregar más información';
+  }
+  document.getElementById('clientes-listado').style.display = 'none';
+  document.getElementById('clientes-form').style.display = 'block';
+}
+
+async function eliminarCliente(id) {
+  if (!confirm('¿Mover cliente a papelera?')) return;
+  const res = await fetch(`/api/clientes/${id}`, { method: 'DELETE', headers: csrfHeaders() });
+  if (res.ok) {
+    toast('Cliente movido a papelera');
+    if (editingClientId === id) limpiarFormularioCliente();
+    cargarClientes();
+  } else {
+    const d = await res.json().catch(() => ({}));
+    toast(d.error || 'No se pudo eliminar cliente', 'err');
+  }
+}
+
+/* ── Papelera ─────────────────────── */
+async function cargarPapelera() {
+  // Props
+  const pb = document.getElementById('trash-props-body');
+  if (pb) {
+    try {
+      const res = await fetch('/api/propiedades/papelera');
+      const items = await res.json();
+      if (!items.length) {
+        pb.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px">Sin propiedades eliminadas</td></tr>';
+      } else {
+        pb.innerHTML = items.map(p => {
+          const d = p.deleted_at ? new Date(p.deleted_at).toLocaleString('es-AR',{dateStyle:'short',timeStyle:'short'}) : '-';
+          return `<tr>
+            <td>${p.titulo||'Sin título'}</td>
+            <td style="text-transform:capitalize">${p.source_portal||'-'}</td>
+            <td>${p.precio||'-'}</td>
+            <td>${d}</td>
+            <td style="display:flex;gap:6px">
+              <button class="btn btn-ghost" style="padding:6px 10px;font-size:12px" onclick="restaurarPropiedad(${p.id})">Restaurar</button>
+              <button class="btn btn-ghost" style="padding:6px 10px;font-size:12px;color:var(--error)" onclick="eliminarPermanentementePropiedad(${p.id})">Eliminar</button>
+            </td>
+          </tr>`;
+        }).join('');
+      }
+    } catch(e) { pb.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px">Error</td></tr>'; }
+  }
+  // Clients
+  const cb = document.getElementById('trash-clients-body');
+  if (cb) {
+    try {
+      const res = await fetch('/api/clientes/papelera');
+      const items = await res.json();
+      if (!items.length) {
+        cb.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px">Sin clientes eliminados</td></tr>';
+      } else {
+        cb.innerHTML = items.map(c => `<tr>
+          <td><strong>${c.nombre||'-'}</strong></td>
+          <td>${c.telefono||'-'}</td>
+          <td style="text-transform:capitalize">${c.tipo||'-'}</td>
+          <td>${c.zonas_busqueda||'-'}</td>
+          <td style="display:flex;gap:6px">
+            <button class="btn btn-ghost" style="padding:6px 10px;font-size:12px" onclick="restaurarCliente(${c.id})">Restaurar</button>
+            <button class="btn btn-ghost" style="padding:6px 10px;font-size:12px;color:var(--error)" onclick="eliminarPermanentementeCliente(${c.id})">Eliminar</button>
+          </td>
+        </tr>`).join('');
+      }
+    } catch(e) { cb.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px">Error</td></tr>'; }
+  }
+}
+
+async function restaurarPropiedad(id) {
+  const res = await fetch(`/api/propiedades/${id}/restaurar`, { method:'POST', headers:csrfHeaders(), body:'{}' });
+  if (res.ok) { toast('Propiedad restaurada'); cargarPapelera(); } else toast('Error al restaurar','err');
+}
+
+async function restaurarCliente(id) {
+  const res = await fetch(`/api/clientes/${id}/restaurar`, { method:'POST', headers:csrfHeaders(), body:'{}' });
+  if (res.ok) { toast('Cliente restaurado'); cargarPapelera(); } else toast('Error al restaurar','err');
+}
+
+async function eliminarPermanentementePropiedad(id) {
+  if (!confirm('⚠️ ¿Eliminar esta propiedad PERMANENTEMENTE? No se puede deshacer.')) return;
+  const res = await fetch(`/api/propiedades/${id}/eliminar-definitivo`, { method:'DELETE', headers:csrfHeaders() });
+  if (res.ok) { toast('Propiedad eliminada permanentemente'); cargarPapelera(); } else toast('Error al eliminar','err');
+}
+
+async function eliminarPermanentementeCliente(id) {
+  if (!confirm('⚠️ ¿Eliminar este cliente PERMANENTEMENTE? No se puede deshacer.')) return;
+  const res = await fetch(`/api/clientes/${id}/eliminar-definitivo`, { method:'DELETE', headers:csrfHeaders() });
+  if (res.ok) { toast('Cliente eliminado permanentemente'); cargarPapelera(); } else toast('Error al eliminar','err');
+}
+
+async function vaciarTodosPropiedades() {
+  if (!confirm('⚠️ ¿Vaciar TODA la papelera de propiedades? No se puede deshacer.')) return;
+  const res = await fetch('/api/propiedades/papelera/vaciar', { method:'DELETE', headers:csrfHeaders() });
+  if (res.ok) { toast('Papelera de propiedades vaciada'); cargarPapelera(); } else toast('Error al vaciar','err');
+}
+
+async function vaciarTodosClientes() {
+  if (!confirm('⚠️ ¿Vaciar TODA la papelera de clientes? No se puede deshacer.')) return;
+  const res = await fetch('/api/clientes/papelera/vaciar', { method:'DELETE', headers:csrfHeaders() });
+  if (res.ok) { toast('Papelera de clientes vaciada'); cargarPapelera(); } else toast('Error al vaciar','err');
+}
+
+/* ── Perfil ───────────────────────── */
+async function guardarPerfil() {
+  const payload = {
+    nombre:        document.getElementById('p_nombre').value.trim(),
+    whatsapp:      document.getElementById('p_whatsapp').value.trim(),
+    form_url:      document.getElementById('p_form').value.trim(),
+  };
+  const res = await fetch('/api/perfil', { method:'POST', headers:csrfHeaders(), body:JSON.stringify(payload) });
+  if (res.ok) {
+    toast('Perfil guardado');
+    document.getElementById('g_nombre').value   = payload.nombre;
+    document.getElementById('g_whatsapp').value = payload.whatsapp;
+    document.getElementById('g_form').value     = payload.form_url;
+  } else toast('Error al guardar', 'err');
+}
+
+/* ── Contraseña ───────────────────── */
+async function cambiarPassword() {
+  const pw_actual    = document.getElementById('pw_actual').value;
+  const pw_nueva     = document.getElementById('pw_nueva').value;
+  const pw_confirmar = document.getElementById('pw_confirmar').value;
+  if (pw_nueva !== pw_confirmar) { toast('Las contraseñas no coinciden', 'err'); return; }
+  if (pw_nueva.length < 6) { toast('Mínimo 6 caracteres', 'err'); return; }
+  const res = await fetch('/api/cambiar_password', { method:'POST', headers:csrfHeaders(), body:JSON.stringify({ pw_actual, pw_nueva }) });
+  const data = await res.json();
+  if (res.ok) {
+    toast('Contraseña actualizada');
+    ['pw_actual','pw_nueva','pw_confirmar'].forEach(id => document.getElementById(id).value = '');
+  } else toast(data.error || 'Error', 'err');
+}
+
+/* ── Admin ────────────────────────── */
+{% if is_admin %}
+async function cargarUsuarios() {
+  const res = await fetch('/api/admin/usuarios');
+  const users = await res.json();
+  document.getElementById('users-body').innerHTML = users.map(u => `
+    <tr>
+      <td><strong>${u.nombre || u.username}</strong></td>
+      <td style="color:var(--muted);font-size:12px">${u.username}</td>
+      <td><span class="badge ${u.role === 'admin' ? 'badge-admin' : 'badge-user'}">${u.role}</span></td>
+      <td><span class="badge ${u.active ? 'badge-active' : 'badge-off'}">${u.active ? 'Activo' : 'Inactivo'}</span></td>
+      <td>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          ${u.username !== 'admin' ? `<button class="btn btn-ghost" style="padding:6px 10px;font-size:12px" onclick="toggleUser('${u.username}')">${u.active ? 'Desactivar' : 'Activar'}</button>` : ''}
+          <button class="btn btn-ghost" style="padding:6px 10px;font-size:12px" onclick="abrirReset('${u.username}')">Reset pass</button>
+          ${u.username !== 'admin' && u.username !== CURRENT_USERNAME ? `<button class="btn btn-danger" style="padding:6px 10px;font-size:12px" onclick="borrarUsuario('${u.username}')">Borrar</button>` : ''}
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function abrirModalCrear() { document.getElementById('modal-crear').classList.add('open'); setTimeout(() => document.getElementById('new_nombre').focus(), 50); }
+function cerrarModal()     { document.getElementById('modal-crear').classList.remove('open'); }
+
+async function crearUsuario() {
+  const nombre   = document.getElementById('new_nombre').value.trim();
+  const username = document.getElementById('new_user').value.trim();
+  const password = document.getElementById('new_pass').value.trim();
+  if (!nombre || !username || !password) { toast('Completá todos los campos', 'err'); return; }
+  const res = await fetch('/api/admin/crear_usuario', { method:'POST', headers:csrfHeaders(), body:JSON.stringify({ nombre, username, password }) });
+  const data = await res.json();
+  if (res.ok) {
+    cerrarModal(); toast(`Usuario "${username}" creado`); cargarUsuarios();
+    ['new_nombre','new_user','new_pass'].forEach(id => document.getElementById(id).value = '');
+  } else toast(data.error || 'Error', 'err');
+}
+
+async function toggleUser(username) {
+  const res = await fetch('/api/admin/toggle_usuario', { method:'POST', headers:csrfHeaders(), body:JSON.stringify({ username }) });
+  if (res.ok) { cargarUsuarios(); toast('Usuario actualizado'); }
+  else toast('Error', 'err');
+}
+
+function abrirReset(username) {
+  resetTarget = username;
+  document.getElementById('reset-label').textContent = username;
+  document.getElementById('reset_pass').value = '';
+  document.getElementById('modal-reset').classList.add('open');
+  setTimeout(() => document.getElementById('reset_pass').focus(), 50);
+}
+function cerrarModalReset() { document.getElementById('modal-reset').classList.remove('open'); resetTarget = null; }
+
+async function confirmarReset() {
+  const password = document.getElementById('reset_pass').value.trim();
+  if (password.length < 6) { toast('Mínimo 6 caracteres', 'err'); return; }
+  const res = await fetch('/api/admin/reset_password', { method:'POST', headers:csrfHeaders(), body:JSON.stringify({ username: resetTarget, password }) });
+  if (res.ok) { cerrarModalReset(); toast('Contraseña reseteada'); }
+  else { const d = await res.json(); toast(d.error || 'Error', 'err'); }
+}
+
+async function borrarUsuario(username) {
+  if (!confirm(`¿Borrar usuario "${username}"? Esta acción no se puede deshacer.`)) return;
+  const res = await fetch('/api/admin/delete_usuario', {
+    method: 'POST',
+    headers: csrfHeaders(),
+    body: JSON.stringify({ username }),
+  });
+  if (res.ok) {
+    toast('Usuario borrado');
+    cargarUsuarios();
+  } else {
+    const d = await res.json().catch(() => ({}));
+    toast(d.error || 'Error al borrar usuario', 'err');
+  }
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { cerrarModal(); cerrarModalReset(); closeSidebar(); }
+});
+{% endif %}
+
+window.addEventListener('DOMContentLoaded', () => {
+  cargarPropiedadesActivas();
+  cargarClientes();
+  refreshTipoLabel();
+  refreshAmbientesLabel();
+  renderZonasSugeridas(document.getElementById('c_zonas_search')?.value || '');
+});
+</script>
+</body>
+</html>

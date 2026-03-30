@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{ prop.titulo }}</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',sans-serif;background:#f5f5f5;color:#404041;-webkit-font-smoothing:antialiased}
+.ct{max-width:1000px;margin:0 auto;padding:24px 16px}
+.card{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+.gp{background:linear-gradient(135deg,#003DA5,#DC1C2E);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+
+/* ── Gallery Grid ─────────────────────────────── */
+.gallery-wrap{position:relative;margin-bottom:20px}
+.gallery-grid{display:grid;grid-template-columns:3fr 2fr;grid-template-rows:210px 210px;gap:4px;border-radius:14px;overflow:hidden;height:424px}
+.gallery-main{grid-column:1;grid-row:1/3;position:relative;overflow:hidden;cursor:pointer;background:#ddd}
+.gallery-main img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .35s}
+.gallery-main:hover img{transform:scale(1.03)}
+.gallery-smalls{grid-column:2;grid-row:1/3;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:4px}
+.gallery-small{position:relative;overflow:hidden;cursor:pointer;background:#ddd}
+.gallery-small img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .35s}
+.gallery-small:hover img{transform:scale(1.06)}
+.gallery-small-empty{background:#e8e8e8;cursor:default}
+.gallery-more-overlay{position:absolute;inset:0;background:rgba(0,0,0,.48);display:flex;align-items:center;justify-content:center;color:#fff;font-size:17px;font-weight:700;letter-spacing:.01em;pointer-events:none}
+.gallery-btn-all{position:absolute;bottom:14px;right:14px;background:rgba(255,255,255,.95);border:1.5px solid #ccc;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;color:#333;cursor:pointer;transition:background .2s,box-shadow .2s;box-shadow:0 2px 6px rgba(0,0,0,.12);font-family:inherit}
+.gallery-btn-all:hover{background:#fff;box-shadow:0 3px 10px rgba(0,0,0,.18)}
+@media(max-width:640px){
+  .gallery-grid{grid-template-columns:1fr;grid-template-rows:260px;height:260px}
+  .gallery-main{grid-row:1}
+  .gallery-smalls{display:none}
+}
+
+/* ── Layout ──────────────────────────────────── */
+.layout{display:grid;grid-template-columns:2fr 1fr;gap:20px;align-items:start}
+@media(max-width:768px){
+  .layout{display:block}
+  .sidebar{margin-top:16px}
+  .details-grid{grid-template-columns:repeat(2,1fr)!important}
+}
+
+/* ── Details grid ─────────────────────────────── */
+.details-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;text-align:center}
+.detail-item{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 4px}
+.detail-icon{width:32px;height:32px;color:#003DA5}
+.detail-icon svg{width:32px;height:32px}
+.detail-label{font-size:13px;font-weight:600;color:#333;line-height:1.3}
+
+/* ── Description ──────────────────────────────── */
+.desc-text{font-size:14px;color:#505050;line-height:1.8;position:relative;overflow:hidden}
+.desc-text p{margin-bottom:14px;white-space:pre-line}
+.desc-text.collapsed{max-height:420px}
+.desc-fade{position:absolute;bottom:0;left:0;right:0;height:60px;background:linear-gradient(transparent,#fff);pointer-events:none}
+.desc-text:not(.collapsed) .desc-fade{display:none}
+.desc-toggle{display:inline-block;margin-top:10px;font-size:13px;font-weight:600;color:#003DA5;cursor:pointer;border:none;background:none;padding:0}
+.desc-toggle:hover{text-decoration:underline}
+
+/* ── Fullscreen Modal ─────────────────────────── */
+.modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:9999;flex-direction:column;align-items:center;justify-content:center}
+.modal.open{display:flex}
+.modal-close{position:fixed;top:16px;right:20px;background:rgba(255,255,255,.12);border:none;color:white;font-size:28px;width:44px;height:44px;border-radius:50%;cursor:pointer;z-index:10001;display:flex;align-items:center;justify-content:center;transition:background .2s;backdrop-filter:blur(4px)}
+.modal-close:hover{background:rgba(255,255,255,.22)}
+.modal-nav{position:fixed;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.14);border:none;color:white;font-size:32px;width:52px;height:52px;border-radius:50%;cursor:pointer;z-index:10001;backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;transition:background .2s;line-height:1}
+.modal-nav:hover{background:rgba(255,255,255,.26)}
+.modal-nav.prev{left:16px}
+.modal-nav.next{right:16px}
+.modal-img-wrap{display:flex;align-items:center;justify-content:center;width:100%;flex:1;min-height:0;padding:10px 70px}
+#modal-img{max-width:100%;max-height:88vh;object-fit:contain;border-radius:6px;display:block}
+.modal-counter{color:rgba(255,255,255,.85);font-size:14px;font-weight:600;padding:8px 0 2px;letter-spacing:.04em;flex-shrink:0}
+.modal-strip{display:flex;gap:6px;padding:0 4px 10px;overflow-x:auto;max-width:92vw;scrollbar-width:none;flex-shrink:0}
+.modal-strip::-webkit-scrollbar{display:none}
+.modal-thumb{width:64px;height:46px;border-radius:5px;object-fit:cover;cursor:pointer;opacity:.5;border:2px solid transparent;flex-shrink:0;transition:opacity .2s,border-color .2s}
+.modal-thumb.active{opacity:1;border-color:#fff}
+.modal-thumb:hover{opacity:.85}
+</style>
+</head>
+<body>
+<div class="ct">
+  <!-- Title & Price -->
+  <div style="margin-bottom:20px">
+    <h1 style="font-size:clamp(20px,4vw,28px);font-weight:800;color:#1A3668;line-height:1.2;margin-bottom:6px">{{ prop.titulo }}</h1>
+    <p style="font-size:13px;color:#949CA1;margin-bottom:10px">{{ prop.ubicacion }}</p>
+    <p class="gp" style="font-size:clamp(22px,4vw,30px);font-weight:800">{{ prop.precio }}</p>
+  </div>
+
+  <!-- Gallery Grid: 1 large + 4 small -->
+  <div class="gallery-wrap">
+    <div class="gallery-grid">
+      <!-- Main large photo -->
+      <div class="gallery-main" onclick="openModal(0)">
+        {% if images %}
+        <img src="{{ images[0] }}" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22400%22 height=%22300%22><rect fill=%22%23ddd%22 width=%22400%22 height=%22300%22/></svg>'" alt="Foto 1">
+        {% endif %}
+      </div>
+      <!-- 2×2 small photos -->
+      <div class="gallery-smalls">
+        {% for i in range(1, 5) %}
+        {% if i < images|length %}
+        <div class="gallery-small" onclick="openModal({{ i }})">
+          <img src="{{ images[i] }}" onerror="this.parentElement.style.background='#e0e0e0';this.remove()" alt="Foto {{ i+1 }}">
+          {% if i == 4 and images|length > 5 %}
+          <div class="gallery-more-overlay">+{{ images|length - 5 }} fotos</div>
+          {% endif %}
+        </div>
+        {% else %}
+        <div class="gallery-small gallery-small-empty"></div>
+        {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+    {% if images|length > 1 %}
+    <button class="gallery-btn-all" onclick="openModal(0)">
+      &#9632;&nbsp; Ver todas las fotos ({{ images|length }})
+    </button>
+    {% endif %}
+  </div>
+
+  <!-- Main Layout: 2fr / 1fr -->
+  <div class="layout">
+    <div>
+      <!-- Detalles de la propiedad -->
+      {% if detalles.ambientes or detalles.banos or detalles.metros_totales or detalles.metros_cubiertos or detalles.dormitorios %}
+      <div class="card" style="margin-bottom:16px">
+        <p style="font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#949CA1;margin-bottom:16px">Detalles de la propiedad</p>
+        <div class="details-grid">
+          {% if detalles.ambientes %}
+          <div class="detail-item">
+            <div class="detail-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+            </div>
+            <span class="detail-label">{{ detalles.ambientes }} amb.</span>
+          </div>
+          {% endif %}
+          {% if detalles.dormitorios %}
+          <div class="detail-item">
+            <div class="detail-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4v16"/><path d="M2 8h18a2 2 0 0 1 2 2v10"/><path d="M2 17h20"/><path d="M6 8v9"/></svg>
+            </div>
+            <span class="detail-label">{{ detalles.dormitorios }} dorm.</span>
+          </div>
+          {% endif %}
+          {% if detalles.banos %}
+          <div class="detail-item">
+            <div class="detail-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h16a1 1 0 0 1 1 1v3a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4v-3a1 1 0 0 1 1-1z"/><path d="M6 12V5a2 2 0 0 1 2-2h3v2.25"/><circle cx="12" cy="7" r="1"/></svg>
+            </div>
+            <span class="detail-label">{{ detalles.banos }} baños</span>
+          </div>
+          {% endif %}
+          {% if detalles.metros_totales %}
+          <div class="detail-item">
+            <div class="detail-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 3v18"/></svg>
+            </div>
+            <span class="detail-label">{{ detalles.metros_totales }} m² tot.</span>
+          </div>
+          {% endif %}
+          {% if detalles.metros_cubiertos %}
+          <div class="detail-item">
+            <div class="detail-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 15h18"/><path d="M15 3v18"/></svg>
+            </div>
+            <span class="detail-label">{{ detalles.metros_cubiertos }} m² cub.</span>
+          </div>
+          {% endif %}
+          {% if detalles.cocheras %}
+          <div class="detail-item">
+            <div class="detail-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17h14M5 17a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h1l1.5-3h9L18 7h1a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2M5 17a2 2 0 0 0-2 2v1h18v-1a2 2 0 0 0-2-2"/><circle cx="7.5" cy="13" r="1.5"/><circle cx="16.5" cy="13" r="1.5"/></svg>
+            </div>
+            <span class="detail-label">{{ detalles.cocheras }} coch.</span>
+          </div>
+          {% endif %}
+          {% if detalles.antiguedad %}
+          <div class="detail-item">
+            <div class="detail-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            </div>
+            <span class="detail-label">{{ detalles.antiguedad }} años</span>
+          </div>
+          {% endif %}
+          {% if detalles.disposicion %}
+          <div class="detail-item">
+            <div class="detail-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+            </div>
+            <span class="detail-label">{{ detalles.disposicion }}</span>
+          </div>
+          {% endif %}
+          {% if detalles.orientacion %}
+          <div class="detail-item">
+            <div class="detail-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+            </div>
+            <span class="detail-label">{{ detalles.orientacion }}</span>
+          </div>
+          {% endif %}
+          {% if detalles.luminosidad %}
+          <div class="detail-item">
+            <div class="detail-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+            </div>
+            <span class="detail-label">{{ detalles.luminosidad }}</span>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Descripción -->
+      <div class="card" style="margin-bottom:16px">
+        <p style="font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#949CA1;margin-bottom:14px">Descripción</p>
+        <div class="desc-text collapsed" id="desc-text">
+          {% for p in descripcion_parts %}
+          <p>{{ p }}</p>
+          {% endfor %}
+          <div class="desc-fade" id="desc-fade"></div>
+        </div>
+        <button class="desc-toggle" id="desc-toggle" onclick="toggleDesc()">Mostrar más</button>
+      </div>
+    </div>
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <div class="card" style="border-top:4px solid #DC1C2E;text-align:center;position:sticky;top:16px">
+        <p style="font-size:10px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:#949CA1;margin-bottom:8px">Precio</p>
+        <p class="gp" style="font-size:26px;font-weight:800;margin-bottom:16px">{{ prop.precio }}</p>
+        <div style="height:1px;background:#f0f0f0;margin-bottom:16px"></div>
+        <div style="width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg,#003DA5,#DC1C2E);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:white;margin:0 auto 10px">{{ inicial }}</div>
+        <p style="font-weight:700;font-size:14px;color:#1A3668">{{ prop.agent_name }}</p>
+        <p style="font-size:10px;color:#DC1C2E;font-weight:600;text-transform:uppercase;letter-spacing:.08em;margin-bottom:16px">Asesor Inmobiliario</p>
+        <a href="https://wa.me/{{ prop.agent_whatsapp }}?text={{ wa_msg }}" target="_blank"
+           style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;background:#25D366;color:white;padding:13px;border-radius:10px;font-weight:700;font-size:14px;text-decoration:none;margin-bottom:2px">
+          Consultar
+        </a>
+        {% if survey_url %}
+        <a href="{{ survey_url }}" target="_blank"
+           style="display:block;width:100%;text-align:center;padding:12px;border-radius:10px;font-size:13px;font-weight:600;background:#f0f4ff;color:#1A3668;border:1.5px solid #003DA5;text-decoration:none;margin-top:10px">
+          Ya visitaste la propiedad?
+        </a>
+        {% endif %}
+
+        {% if prop.info_adicional.expensas %}
+        <div style="margin-top:14px">
+          <div style="display:flex;justify-content:space-between;padding:10px 0;border-top:1px solid #f0f0f0">
+            <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:#949CA1">Expensas</span>
+            <span style="font-size:12px;font-weight:700;color:#404041">{{ prop.info_adicional.expensas }}</span>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div style="margin-top:40px;padding-top:24px;border-top:1px solid #e5e7eb">
+    <div style="background:#f9f9f9;border:1px solid #e0e0e0;border-radius:10px;padding:18px 22px;margin-bottom:18px">
+      <p style="font-size:12px;font-weight:700;color:#404041;margin-bottom:8px">Aviso importante:</p>
+      <p style="font-size:12px;color:#666;line-height:1.7">La siguiente informacion se proporciona con fines orientativos para personas en busqueda de inmuebles. Las descripciones, imagenes y datos aqui presentados provienen de terceros y podrian corresponder a una propiedad comercializada por otra inmobiliaria.<br><br>Se recomienda confirmar todos los detalles con la inmobiliaria responsable de la operacion.<br>La disponibilidad de la unidad esta sujeta a cambios sin previo aviso, al igual que su precio. Las superficies, medidas, expensas y servicios mencionados son aproximados y pueden sufrir modificaciones.<br>Las fotografias y videos tienen caracter ilustrativo y no contractual.</p>
+    </div>
+    <p style="text-align:center;font-size:11px;color:#bbb">Ficha creada por <strong style="color:#949CA1">FichasIA</strong></p>
+  </div>
+</div>
+
+<!-- Fullscreen Modal -->
+<div id="modal" class="modal" onclick="if(event.target===this||event.target.id==='modal')closeModal()">
+  <button class="modal-close" onclick="closeModal()" title="Cerrar">&times;</button>
+  <button class="modal-nav prev" id="btn-prev" onclick="event.stopPropagation();modalNav(-1)">&#8249;</button>
+  <button class="modal-nav next" id="btn-next" onclick="event.stopPropagation();modalNav(1)">&#8250;</button>
+  <div class="modal-img-wrap" onclick="event.stopPropagation()">
+    <img id="modal-img" src="" alt="Foto">
+  </div>
+  <div class="modal-counter" id="photo-counter"></div>
+  <div class="modal-strip" id="modal-strip" onclick="event.stopPropagation()"></div>
+</div>
+
+<script>
+var IMAGES = {{ images|tojson }};
+var modalIdx = 0;
+var total = IMAGES.length;
+
+/* ── Build modal thumbnail strip ── */
+(function(){
+  var strip = document.getElementById('modal-strip');
+  IMAGES.forEach(function(src, i){
+    var img = document.createElement('img');
+    img.src = src;
+    img.className = 'modal-thumb' + (i===0?' active':'');
+    img.alt = 'Foto '+(i+1);
+    img.onerror = function(){ this.style.display='none'; };
+    img.onclick = function(){ openModal(i); };
+    strip.appendChild(img);
+  });
+})();
+
+/* ── Modal ── */
+function openModal(i){
+  modalIdx = i;
+  updateModal();
+  document.getElementById('modal').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function updateModal(){
+  document.getElementById('modal-img').src = IMAGES[modalIdx] || '';
+  document.getElementById('photo-counter').textContent = (modalIdx+1) + ' / ' + total;
+  document.getElementById('btn-prev').style.visibility = modalIdx > 0 ? 'visible' : 'hidden';
+  document.getElementById('btn-next').style.visibility = modalIdx < total-1 ? 'visible' : 'hidden';
+  /* sync thumbnail strip */
+  var thumbs = document.querySelectorAll('.modal-thumb');
+  thumbs.forEach(function(t,i){ t.classList.toggle('active', i===modalIdx); });
+  if(thumbs[modalIdx]) thumbs[modalIdx].scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'});
+}
+function modalNav(dir){
+  var next = modalIdx + dir;
+  if(next >= 0 && next < total){ modalIdx = next; updateModal(); }
+}
+function closeModal(){
+  document.getElementById('modal').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+/* ── Keyboard ── */
+document.addEventListener('keydown', function(e){
+  if(!document.getElementById('modal').classList.contains('open')) return;
+  if(e.key==='Escape') closeModal();
+  if(e.key==='ArrowLeft') modalNav(-1);
+  if(e.key==='ArrowRight') modalNav(1);
+});
+
+/* ── Touch swipe en modal ── */
+(function(){
+  var modal = document.getElementById('modal');
+  var startX = 0;
+  modal.addEventListener('touchstart', function(e){ startX = e.touches[0].clientX; }, {passive:true});
+  modal.addEventListener('touchend', function(e){
+    var diff = startX - e.changedTouches[0].clientX;
+    if(Math.abs(diff) > 50) modalNav(diff > 0 ? 1 : -1);
+  });
+})();
+
+/* ── Description toggle ── */
+function toggleDesc(){
+  var el = document.getElementById('desc-text');
+  var btn = document.getElementById('desc-toggle');
+  var fade = document.getElementById('desc-fade');
+  if(el.classList.contains('collapsed')){
+    el.classList.remove('collapsed');
+    btn.textContent = 'Mostrar menos';
+    if(fade) fade.style.display = 'none';
+  } else {
+    el.classList.add('collapsed');
+    btn.textContent = 'Mostrar más';
+    if(fade) fade.style.display = '';
+  }
+}
+(function(){
+  var el = document.getElementById('desc-text');
+  var btn = document.getElementById('desc-toggle');
+  var fade = document.getElementById('desc-fade');
+  if(el && el.scrollHeight <= 420){
+    btn.style.display = 'none';
+    el.classList.remove('collapsed');
+    if(fade) fade.style.display = 'none';
+  }
+})();
+</script>
+</body>
+</html>
