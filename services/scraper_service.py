@@ -178,7 +178,11 @@ class ScraperService:
         price_match = re.search(r"(?:USD|U\$S|AR\$|\$)\s*[\d.,]+", focused_markdown or markdown, re.I)
         titulo_html = listing_payload.get("titulo") or self._extract_title_from_html(trusted_html)
         precio_html = listing_payload.get("precio") or self._extract_price_from_html(trusted_html)
-        descripcion = listing_payload.get("descripcion") or self._extract_description(source_text, focused_html, full_source_text, html) or self._best_text_block(source_text)
+        descripcion = (
+            self._extract_description(source_text, focused_html, full_source_text, html)
+            or listing_payload.get("descripcion")
+            or self._best_text_block(source_text)
+        )
         caracteristicas = self._extract_features(source_text, focused_html)
         detalles = self._extract_detail_candidates(source_text)
         detalles_html = self._extract_detail_candidates_from_html(focused_html)
@@ -233,6 +237,60 @@ class ScraperService:
 
         # No filtrar aquí, devolver todas las URLs en orden
         return urls
+
+    @staticmethod
+    def _extract_ordered_gallery_image_urls_from_html(html: str) -> list[str]:
+        """Extrae las fotos del carrusel en el mismo orden en que aparecen en el DOM."""
+        if not html:
+            return []
+
+        gallery_tokens = (
+            "imagegrid", "gallery", "carousel", "slider", "multimedia",
+            "photo", "photos", "foto", "fotos", "cover", "slide",
+        )
+        blocked_tokens = (
+            "logo", "icon", "sprite", "placeholder", "favicon",
+            "floorplan", "planos", "plano", "mapa", "staticmap",
+        )
+        attribute_patterns = (
+            "src", "data-src", "data-lazy", "data-url", "data-original",
+            "data-image", "data-bg", "data-flickity-lazyload",
+        )
+
+        ordered: list[str] = []
+        for match in re.finditer(r"<img\b[^>]*>", html, re.I | re.S):
+            tag = match.group(0)
+            start = max(0, match.start() - 800)
+            end = min(len(html), match.end() + 800)
+            context = html[start:end].lower()
+
+            if not any(token in context for token in gallery_tokens):
+                continue
+            if any(token in context for token in blocked_tokens):
+                continue
+
+            url = ""
+            for attr in attribute_patterns:
+                attr_match = re.search(rf'{attr}=["\']([^"\']+)["\']', tag, re.I)
+                if not attr_match:
+                    continue
+                candidate = ScraperService._decode_json_string(attr_match.group(1).strip())
+                if candidate.startswith("//"):
+                    candidate = f"https:{candidate}"
+                if candidate.startswith(("http://", "https://")):
+                    url = candidate
+                    break
+            if not url:
+                continue
+
+            lower_url = url.lower()
+            if any(token in lower_url for token in blocked_tokens):
+                continue
+            if re.search(r"\.(css|js|svg|gif|ico|woff2?)(\?|$)", lower_url):
+                continue
+            ordered.append(url)
+
+        return ordered[:MAX_IMAGES]
 
     @staticmethod
     def _extract_image_urls_from_next_data(html: str) -> list[str]:
@@ -319,7 +377,16 @@ class ScraperService:
         gallery_limit = self._extract_gallery_limit(focused_markdown, focused_html)
 
         # Extracción específica de __NEXT_DATA__ (Next.js / ZonaProp / Argenprop)
+        dom_ordered_urls = self._extract_ordered_gallery_image_urls_from_html(html)
         next_data_urls = self._extract_image_urls_from_next_data(html)
+
+        if portal == "zonaprop" and dom_ordered_urls:
+            result = dom_ordered_urls[: gallery_limit or MAX_IMAGES]
+            if log:
+                log(f"  Usando imÃ¡genes del DOM de Zonaprop en orden original: {len(result)} fotos")
+                for i, u in enumerate(result[:8]):
+                    log(f"  img[{i}]: {u[:100]}")
+            return [ScraperService._enhance_image_url_resolution(url) for url in result]
 
         # PRIORIDAD 1: Si next_data_urls tiene suficientes imágenes, úsalas en su orden original.
         # Esto preserva el orden de la galería tal como lo define el portal (ZonaProp, Argenprop, etc.)
@@ -723,7 +790,7 @@ class ScraperService:
         payload["titulo"] = extract_string("title", "postingTitle", "seoTitle", "publicationTitle", min_len=8, max_len=220)
         payload["precio"] = extract_string("formattedPrice", "priceFormatted", min_len=4, max_len=80)
         payload["ubicacion"] = extract_string("titleLocation", "locationName", "postingLocation", min_len=8, max_len=220)
-        payload["descripcion"] = extract_string("description", "descriptionText", min_len=40, max_len=12000)
+        payload["descripcion"] = ScraperService._extract_description_from_json_context(context)
 
         if not payload["ubicacion"]:
             street = extract_string("streetAddress", min_len=4, max_len=180)
@@ -922,6 +989,11 @@ class ScraperService:
         html_description = ScraperService._extract_description_from_html(html)
         if html_description:
             return html_description
+
+        if full_html:
+            html_description = ScraperService._extract_description_from_html(full_html)
+            if html_description:
+                return html_description
 
         def _is_noise(line: str) -> bool:
             if not line:
@@ -1393,6 +1465,19 @@ class ScraperService:
 
     @staticmethod
     def _extract_description_from_html(html: str) -> str:
+        if not html:
+            return ""
+        container_patterns = [
+            r'<(?:div|section)[^>]+(?:data-testid|class)=["\'][^"\']*(?:description|description-section|description-text|ad-description|post-description)[^"\']*["\'][^>]*>(.*?)</(?:div|section)>',
+            r'<p[^>]+(?:data-testid|class)=["\'][^"\']*(?:description|description-text|ad-description)[^"\']*["\'][^>]*>(.*?)</p>',
+        ]
+        for pattern in container_patterns:
+            for match in re.finditer(pattern, html, re.I | re.S):
+                candidate = ScraperService._html_fragment_to_text(match.group(1))
+                candidate = ScraperService._clean_description(candidate)
+                if len(candidate) >= 80:
+                    return candidate
+
         text = ScraperService._html_to_text(html)
         if not text:
             return ""
@@ -1415,6 +1500,7 @@ class ScraperService:
         if not text:
             return ""
         text = re.sub(r"\bVer datos\b\.?", "", text, flags=re.I)
+        text = re.sub(r"\b(?:Leer m[aÃ¡]s|Leer menos|Ver m[aÃ¡]s)\b\.?", "", text, flags=re.I)
         text = re.sub(r"\bLEPORE SAN CRISTOBAL\b.*$", "", text, flags=re.I | re.S)
         text = re.sub(r"\bLEPORE PROPIEDADES\b.*$", "", text, flags=re.I | re.S)
         text = re.sub(r"\bAVISO LEGAL:.*$", "", text, flags=re.I | re.S)
@@ -1423,6 +1509,42 @@ class ScraperService:
         text = re.sub(r"\n{3,}", "\n\n", text)
         text = re.sub(r"[ \t]{2,}", " ", text)
         return text.strip(" .\n")
+
+    @staticmethod
+    def _extract_description_from_json_context(context: str) -> str:
+        if not context:
+            return ""
+        for key in ("description", "descriptionText"):
+            match = re.search(
+                fr'"{re.escape(key)}"\s*:\s*"((?:[^"\\]|\\.){{40,20000}})"',
+                context,
+                re.I | re.S,
+            )
+            if not match:
+                continue
+            candidate = ScraperService._decode_json_string(match.group(1))
+            candidate = candidate.replace("\r\n", "\n").replace("\r", "\n")
+            candidate = ScraperService._clean_description(candidate)
+            if len(candidate) >= 80:
+                return candidate
+        return ""
+
+    @staticmethod
+    def _html_fragment_to_text(fragment: str) -> str:
+        if not fragment:
+            return ""
+        text = re.sub(r"(?is)<script[^>]*>.*?</script>", " ", fragment)
+        text = re.sub(r"(?is)<style[^>]*>.*?</style>", " ", text)
+        text = re.sub(r"(?i)<br\s*/?>", "\n", text)
+        text = re.sub(r"(?i)</p>|</div>|</li>|</section>|</article>", "\n\n", text)
+        text = re.sub(r"(?is)<[^>]+>", " ", text)
+        text = unescape(text)
+        text = text.replace("\xa0", " ")
+        text = re.sub(r"\r", "", text)
+        text = re.sub(r"\n{3,}", "\n\n", text)
+        text = re.sub(r"[ \t]{2,}", " ", text)
+        text = re.sub(r" *\n *", "\n", text)
+        return text.strip()
 
     @staticmethod
     def _extract_features_from_html(html: str) -> list[str]:
@@ -1531,9 +1653,9 @@ class ScraperService:
         if not blocks:
             blocks = [b for b in blocks if b]
         if not blocks:
-            return markdown[:1200].strip()
+            return markdown.strip()
         blocks.sort(key=lambda b: (ScraperService._text_score(b), len(b)), reverse=True)
-        return blocks[0][:2500].strip()
+        return blocks[0].strip()
 
     @staticmethod
     def _text_score(text: str) -> int:
