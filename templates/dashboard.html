@@ -523,18 +523,18 @@ body {
       <div class="card">
         <span class="card-label">Link de la propiedad</span>
         <input class="url-input" id="url" type="url"
-               placeholder="https://www.zonaprop.com.ar/propiedades/...">
+               placeholder="">
 
         <div class="field-grid mb-3">
           <div class="field">
             <span class="field-label">Tu nombre</span>
             <input class="input" id="g_nombre" type="text"
-                   value="{{ user.nombre or '' }}" placeholder="Christian González">
+                   value="{{ user.nombre or '' }}" placeholder="">
           </div>
           <div class="field">
             <span class="field-label">WhatsApp (sin +)</span>
             <input class="input" id="g_whatsapp" type="text"
-                   value="{{ user.whatsapp or '' }}" placeholder="5491130434062">
+                   value="{{ user.whatsapp or '' }}" placeholder="">
           </div>
         </div>
 
@@ -542,7 +542,7 @@ body {
           <div class="field">
             <span class="field-label">Google Form (encuesta post-visita)</span>
             <input class="input" id="g_form" type="url"
-                   value="{{ user.form_url or '' }}" placeholder="https://forms.gle/...">
+                   value="{{ user.form_url or '' }}" placeholder="">
           </div>
         </div>
 
@@ -756,7 +756,10 @@ body {
     <!-- ── PAPELERA ────────────────────────────────────── -->
     <div class="panel" id="panel-papelera">
       <div class="card" style="margin-bottom:14px">
-        <span class="card-label">Propiedades eliminadas</span>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <span class="card-label" style="margin:0">Propiedades eliminadas</span>
+          <button class="btn btn-ghost" style="padding:6px 12px;font-size:12px;color:var(--error)" onclick="vaciarTodosPropiedades()">Vaciar papelera</button>
+        </div>
         <div style="overflow-x:auto">
           <table class="user-table">
             <thead><tr><th>Propiedad</th><th>Portal</th><th>Precio</th><th>Eliminada</th><th>Acciones</th></tr></thead>
@@ -767,7 +770,10 @@ body {
         </div>
       </div>
       <div class="card">
-        <span class="card-label">Clientes eliminados</span>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <span class="card-label" style="margin:0">Clientes eliminados</span>
+          <button class="btn btn-ghost" style="padding:6px 12px;font-size:12px;color:var(--error)" onclick="vaciarTodosClientes()">Vaciar papelera</button>
+        </div>
         <div style="overflow-x:auto">
           <table class="user-table">
             <thead><tr><th>Nombre</th><th>Teléfono</th><th>Tipo</th><th>Zonas</th><th>Acciones</th></tr></thead>
@@ -787,12 +793,12 @@ body {
           <div class="field">
             <span class="field-label">Nombre completo</span>
             <input class="input" id="p_nombre" type="text"
-                   value="{{ user.nombre or '' }}" placeholder="Tu nombre">
+                   value="{{ user.nombre or '' }}" placeholder="">
           </div>
           <div class="field">
             <span class="field-label">WhatsApp (sin +)</span>
             <input class="input" id="p_whatsapp" type="text"
-                   value="{{ user.whatsapp or '' }}" placeholder="5491130434062">
+                   value="{{ user.whatsapp or '' }}" placeholder="">
           </div>
         </div>
 
@@ -800,7 +806,7 @@ body {
           <div class="field">
             <span class="field-label">Google Form (encuesta post-visita)</span>
             <input class="input" id="p_form" type="url"
-                   value="{{ user.form_url or '' }}" placeholder="https://forms.gle/...">
+                   value="{{ user.form_url or '' }}" placeholder="">
             <p class="note">Se incluye como botón en cada ficha generada</p>
           </div>
         </div>
@@ -1448,7 +1454,10 @@ async function cargarPapelera() {
             <td style="text-transform:capitalize">${p.source_portal||'-'}</td>
             <td>${p.precio||'-'}</td>
             <td>${d}</td>
-            <td><button class="btn btn-ghost" style="padding:6px 10px;font-size:12px" onclick="restaurarPropiedad(${p.id})">Restaurar</button></td>
+            <td style="display:flex;gap:6px">
+              <button class="btn btn-ghost" style="padding:6px 10px;font-size:12px" onclick="restaurarPropiedad(${p.id})">Restaurar</button>
+              <button class="btn btn-ghost" style="padding:6px 10px;font-size:12px;color:var(--error)" onclick="eliminarPermanentementePropiedad(${p.id})">Eliminar</button>
+            </td>
           </tr>`;
         }).join('');
       }
@@ -1468,7 +1477,10 @@ async function cargarPapelera() {
           <td>${c.telefono||'-'}</td>
           <td style="text-transform:capitalize">${c.tipo||'-'}</td>
           <td>${c.zonas_busqueda||'-'}</td>
-          <td><button class="btn btn-ghost" style="padding:6px 10px;font-size:12px" onclick="restaurarCliente(${c.id})">Restaurar</button></td>
+          <td style="display:flex;gap:6px">
+            <button class="btn btn-ghost" style="padding:6px 10px;font-size:12px" onclick="restaurarCliente(${c.id})">Restaurar</button>
+            <button class="btn btn-ghost" style="padding:6px 10px;font-size:12px;color:var(--error)" onclick="eliminarPermanentementeCliente(${c.id})">Eliminar</button>
+          </td>
         </tr>`).join('');
       }
     } catch(e) { cb.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px">Error</td></tr>'; }
@@ -1483,6 +1495,30 @@ async function restaurarPropiedad(id) {
 async function restaurarCliente(id) {
   const res = await fetch(`/api/clientes/${id}/restaurar`, { method:'POST', headers:csrfHeaders(), body:'{}' });
   if (res.ok) { toast('Cliente restaurado'); cargarPapelera(); } else toast('Error al restaurar','err');
+}
+
+async function eliminarPermanentementePropiedad(id) {
+  if (!confirm('⚠️ ¿Eliminar esta propiedad PERMANENTEMENTE? No se puede deshacer.')) return;
+  const res = await fetch(`/api/propiedades/${id}/eliminar-definitivo`, { method:'DELETE', headers:csrfHeaders() });
+  if (res.ok) { toast('Propiedad eliminada permanentemente'); cargarPapelera(); } else toast('Error al eliminar','err');
+}
+
+async function eliminarPermanentementeCliente(id) {
+  if (!confirm('⚠️ ¿Eliminar este cliente PERMANENTEMENTE? No se puede deshacer.')) return;
+  const res = await fetch(`/api/clientes/${id}/eliminar-definitivo`, { method:'DELETE', headers:csrfHeaders() });
+  if (res.ok) { toast('Cliente eliminado permanentemente'); cargarPapelera(); } else toast('Error al eliminar','err');
+}
+
+async function vaciarTodosPropiedades() {
+  if (!confirm('⚠️ ¿Vaciar TODA la papelera de propiedades? No se puede deshacer.')) return;
+  const res = await fetch('/api/propiedades/papelera/vaciar', { method:'DELETE', headers:csrfHeaders() });
+  if (res.ok) { toast('Papelera de propiedades vaciada'); cargarPapelera(); } else toast('Error al vaciar','err');
+}
+
+async function vaciarTodosClientes() {
+  if (!confirm('⚠️ ¿Vaciar TODA la papelera de clientes? No se puede deshacer.')) return;
+  const res = await fetch('/api/clientes/papelera/vaciar', { method:'DELETE', headers:csrfHeaders() });
+  if (res.ok) { toast('Papelera de clientes vaciada'); cargarPapelera(); } else toast('Error al vaciar','err');
 }
 
 /* ── Perfil ───────────────────────── */
