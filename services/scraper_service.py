@@ -11,7 +11,7 @@ from typing import Any, Callable
 from firecrawl import Firecrawl
 
 
-MAX_IMAGES = 60
+MAX_IMAGES = 30
 MIN_PRIMARY_GALLERY_IMAGES = 6
 
 
@@ -66,14 +66,17 @@ class ScraperService:
             "dormitorios":      extracted.pop("dormitorios", None),
             "metros_totales":   extracted.pop("metros_totales", None),
             "metros_cubiertos": extracted.pop("metros_cubiertos", None),
+            "cocheras":         extracted.pop("cocheras", None),
+            "antiguedad":       extracted.pop("antiguedad", None),
             "estado":           extracted.pop("estado", None),
             "disposicion":      extracted.pop("disposicion", None),
             "orientacion":      extracted.pop("orientacion", None),
+            "luminosidad":      extracted.pop("luminosidad", None),
         }
         info_adicional = {
-            "antiguedad": extracted.pop("antiguedad", None),
+            "antiguedad": detalles.get("antiguedad"),
             "expensas":   extracted.pop("expensas", None),
-            "cocheras":   extracted.pop("cocheras", None),
+            "cocheras":   detalles.get("cocheras"),
         }
 
         return {
@@ -169,12 +172,13 @@ class ScraperService:
         focused_markdown = self._focus_listing_content(markdown)
         focused_html = self._focus_listing_content(html)
         source_text = self._merge_sources(focused_markdown, focused_html)
+        full_source_text = self._merge_sources(markdown, html)  # Versión sin focus como fallback
         listing_payload = self._extract_listing_payload_from_html(html, source_url)
         trusted_html = focused_html if listing_payload.get("_listing_id_found") else ""
         price_match = re.search(r"(?:USD|U\$S|AR\$|\$)\s*[\d.,]+", focused_markdown or markdown, re.I)
         titulo_html = listing_payload.get("titulo") or self._extract_title_from_html(trusted_html)
         precio_html = listing_payload.get("precio") or self._extract_price_from_html(trusted_html)
-        descripcion = listing_payload.get("descripcion") or self._extract_description(source_text, focused_html) or self._best_text_block(source_text)
+        descripcion = listing_payload.get("descripcion") or self._extract_description(source_text, focused_html, full_source_text, html) or self._best_text_block(source_text)
         caracteristicas = self._extract_features(source_text, focused_html)
         detalles = self._extract_detail_candidates(source_text)
         detalles_html = self._extract_detail_candidates_from_html(focused_html)
@@ -211,6 +215,26 @@ class ScraperService:
         }
 
     @staticmethod
+    def _extract_image_urls_from_html_grid(html: str) -> list[str]:
+        """Extrae imágenes del HTML en el orden EXACTO que aparecen.
+        Busca todos los src dentro de imageGrid-module__item__ en orden."""
+        if not html:
+            return []
+
+        # Buscar TODAS las imágenes dentro de divs con imageGrid-module__item__
+        # Patrón simple: cualquier img dentro de imageGrid-module__item__
+        pattern = r'class="[^"]*imageGrid-module__item[^"]*"[^>]*>.*?<img[^>]+src="([^"]+)"'
+
+        urls = []
+        for match in re.finditer(pattern, html, re.I | re.S):
+            url = match.group(1).strip()
+            if url and url not in urls:  # Evitar duplicados
+                urls.append(url)
+
+        # No filtrar aquí, devolver todas las URLs en orden
+        return urls
+
+    @staticmethod
     def _extract_image_urls_from_next_data(html: str) -> list[str]:
         """Extrae URLs de imágenes del bloque __NEXT_DATA__ (Next.js) o cualquier
         <script type="application/json"> que contenga arrays de fotos."""
@@ -240,7 +264,10 @@ class ScraperService:
                 # Recorrer el JSON buscando todas las strings que parezcan imágenes
                 ScraperService._collect_image_strings_from_json(data, candidates)
 
-        return ScraperService._filter_image_urls(candidates, strict=True)
+        # Deduplicar primero (preserva el orden de la galería principal),
+        # luego mejorar resolución para descargar en alta calidad.
+        filtered = ScraperService._filter_image_urls(candidates, strict=True)
+        return [ScraperService._enhance_image_url_resolution(u) for u in filtered]
 
     # Claves JSON cuyo valor es probablemente una URL de foto de propiedad.
     _PHOTO_KEY_HINTS: frozenset[str] = frozenset({
@@ -294,6 +321,34 @@ class ScraperService:
         # Extracción específica de __NEXT_DATA__ (Next.js / ZonaProp / Argenprop)
         next_data_urls = self._extract_image_urls_from_next_data(html)
 
+        # PRIORIDAD 1: Si next_data_urls tiene suficientes imágenes, úsalas en su orden original.
+        # Esto preserva el orden de la galería tal como lo define el portal (ZonaProp, Argenprop, etc.)
+        if next_data_urls and len(next_data_urls) >= MIN_PRIMARY_GALLERY_IMAGES:
+            # Filtrar next_data_urls para calidad
+            filtered_next = self._filter_image_urls(next_data_urls, strict=False)
+            if filtered_next:
+                result = filtered_next[: gallery_limit or MAX_IMAGES]
+                if log:
+                    log(f"  Usando imágenes de next_data en su orden original: {len(result)} fotos")
+                    for i, u in enumerate(result[:8]):
+                        log(f"  img[{i}]: {u[:100]}")
+                # Aplicar mejora de resolución
+                result = [ScraperService._enhance_image_url_resolution(url) for url in result]
+                return result
+
+        # PRIORIDAD 2: Extraer imágenes del HTML grid (solo si next_data no tiene suficientes)
+        grid_urls = self._extract_image_urls_from_html_grid(html)
+        if grid_urls and len(grid_urls) >= MIN_PRIMARY_GALLERY_IMAGES:
+            result = grid_urls[: gallery_limit or MAX_IMAGES]
+            if log:
+                log(f"  Usando imágenes del HTML con grid-N (orden correcto): {len(result)} fotos")
+                for i, u in enumerate(result[:8]):
+                    log(f"  img[{i}]: {u[:100]}")
+            # Aplicar mejora de resolución
+            result = [ScraperService._enhance_image_url_resolution(url) for url in result]
+            return result
+
+        # Fallback: mezclar de múltiples fuentes (solo si next_data_urls no fue suficiente)
         primary_candidates: list[str] = []
         for group in (
             self._extract_contextual_image_urls_from_html(focused_html),
@@ -341,7 +396,37 @@ class ScraperService:
             log(f"  next_data_urls={len(next_data_urls)} primary={len(primary_candidates)} llm={len(llm_urls)} firecrawl={len(firecrawl_urls)} → final={len(result)}")
             for i, u in enumerate(result[:8]):
                 log(f"  img[{i}]: {u[:100]}")
+
+        # Aplicar mejora de resolución
+        result = [ScraperService._enhance_image_url_resolution(url) for url in result]
         return result
+
+    @staticmethod
+    def _enhance_image_url_resolution(url: str) -> str:
+        """Aumenta la resolución de imágenes reemplazando parámetros de tamaño."""
+        if not url:
+            return url
+
+        # ZonaProp CDN (imgar.zonapropcdn.com): resolución en el path /NxN/
+        if 'imgar.zonapropcdn.com' in url or 'imgar.zonaprop' in url:
+            url = re.sub(r'/\d{2,4}x\d{2,4}/', '/1200x1200/', url)
+            return url
+
+        # ZonaProp/Argenprop: cambiar parámetro 'w' (width) a máximo
+        if 'img.zp.com.ar' in url or 'img.mercadolibre.com' in url or 'imgmercadolibre' in url:
+            url = re.sub(r'[?&]w=\d+', '', url)
+            if '?' not in url:
+                url += '?w=2000'
+            else:
+                url += '&w=2000'
+            return url
+
+        # MercadoLibre: cambiar calidad/tamaño
+        if 'mlstatic.com' in url or 'mluruguay' in url or 'mlbrasil' in url or 'mlchile' in url:
+            url = re.sub(r'_\w+\.jpg', '.jpg', url)
+            return url
+
+        return url
 
     @staticmethod
     def _append_unique_urls(target: list[str], urls: list[str], preferred_group: str | None = None) -> None:
@@ -832,24 +917,21 @@ class ScraperService:
         return filtered[:MAX_IMAGES]
 
     @staticmethod
-    def _extract_description(text: str, html: str) -> str:
+    def _extract_description(text: str, html: str, full_text: str = "", full_html: str = "") -> str:
+        """Extrae descripción con múltiples estrategias. Si falla con focused, intenta con full."""
         html_description = ScraperService._extract_description_from_html(html)
         if html_description:
             return html_description
-
-        lines = [l.strip() for l in text.splitlines()]
 
         def _is_noise(line: str) -> bool:
             if not line:
                 return False
             if re.search(r"\b(Favorito|Compartir|Notas personales|Ocultar aviso|Ver menos|Ver más avisos|Ver más anuncios)\b", line, re.I):
                 return True
-            # Links markdown de navegación: [texto](url)
             if re.search(r"^\[.+\]\(https?://", line):
                 return True
             if re.fullmatch(r"!?(\[[^\]]*\])?!?\[[^\]]*\]\([^)]+\)\s*", line):
                 return True
-            # Tiles de mapa u otras líneas con múltiples imágenes inline
             if len(re.findall(r"!\[[^\]]*\]\(https?://", line)) >= 2:
                 return True
             if re.search(r"!\[[^\]]*\]\(https?://", line):
@@ -858,14 +940,21 @@ class ScraperService:
                 return True
             return False
 
-        start_idx = -1
-        for i, l in enumerate(lines):
-            if re.fullmatch(r"(#+\s*)?(DESCRIPCION|DESCRIPCIÓN)\s*:?\s*", l, re.I):
-                start_idx = i + 1
-                break
+        def _try_extract_from_text(source_text: str) -> str:
+            """Intenta extraer descripción desde un texto."""
+            if not source_text:
+                return ""
+            lines = [l.strip() for l in source_text.splitlines()]
+            start_idx = -1
+            for i, l in enumerate(lines):
+                if re.fullmatch(r"(#+\s*)?(DESCRIPCION|DESCRIPCIÓN)\s*:?\s*", l, re.I):
+                    start_idx = i + 1
+                    break
 
-        collected: list[str] = []
-        if start_idx != -1:
+            if start_idx == -1:
+                return ""
+
+            collected: list[str] = []
             for l in lines[start_idx:]:
                 if re.search(r"Preguntas para la inmobiliaria|Seleccioná una o más preguntas", l, re.I):
                     break
@@ -882,11 +971,21 @@ class ScraperService:
                 collected.append(l)
                 if sum(len(x) for x in collected) > 10000:
                     break
-            text_result = "\n".join(collected).strip()
-            if text_result:
-                return text_result
+            return "\n".join(collected).strip()
 
-        candidate = ScraperService._best_text_block(text)
+        # Intenta primero con el texto focused
+        result = _try_extract_from_text(text)
+        if result:
+            return result
+
+        # Si falla, intenta con el texto completo (sin focus)
+        if full_text:
+            result = _try_extract_from_text(full_text)
+            if result:
+                return result
+
+        # Último recurso: mejor bloque de texto
+        candidate = ScraperService._best_text_block(text or full_text)
         return candidate.strip()
 
     @staticmethod
@@ -940,55 +1039,92 @@ class ScraperService:
 
     @staticmethod
     def _actions_for_portal(portal: str) -> list[dict[str, Any]]:
+        common_click_labels = [
+            'aceptar', 'entendido', 'cerrar', 'ok',
+            'leer descripción completa', 'leer descripcion completa',
+            'ver descripción completa', 'ver descripcion completa',
+            'leer más', 'ver más', 'ver descripción', 'ver descripcion',
+            'show more', 'read more', 'read full',
+            'ver todas las fotos', 'ver todas las imágenes', 'ver fotos', 'más fotos',
+            'show all photos', 'view all images'
+        ]
+
         if portal != "zonaprop":
+            # Para Argenprop y MercadoLibre: más agresivo
             return [
                 {"type": "wait", "milliseconds": 1500},
                 {
                     "type": "executeJavascript",
-                    "script": """
-                    (() => {
-                      const clickByText = (texts) => {
-                        const nodes = Array.from(document.querySelectorAll('button, a, span, div'));
-                        for (const node of nodes) {
+                    "script": f"""
+                    (() => {{
+                      const clickByText = (texts) => {{
+                        let clicked = false;
+                        const nodes = Array.from(document.querySelectorAll('button, a, span, div, [role="button"]'));
+                        for (const node of nodes) {{
                           const text = (node.innerText || node.textContent || '').trim().toLowerCase();
-                          if (texts.some(t => text.includes(t))) {
-                            node.click();
-                            return true;
-                          }
-                        }
-                        return false;
-                      };
-                      clickByText(['aceptar', 'entendido']);
-                      clickByText(['leer descripción completa', 'leer descripcion completa', 'ver descripción completa', 'leer más', 'ver más', 'ver descripción', 'ver descripcion']);
-                      clickByText(['ver todas las fotos', 'ver fotos', 'más fotos']);
+                          if (texts.some(t => text.includes(t))) {{
+                            try {{ node.click(); }} catch(e) {{}}
+                            clicked = true;
+                          }}
+                        }}
+                        return clicked;
+                      }};
+                      clickByText({json.dumps(common_click_labels)});
                       return 'ok';
-                    })();
+                    }})();
                     """,
                 },
                 {"type": "wait", "milliseconds": 2000},
+                {"type": "scroll", "direction": "down"},
+                {"type": "wait", "milliseconds": 1000},
+                {
+                    "type": "executeJavascript",
+                    "script": f"""
+                    (() => {{
+                      const clickByText = (texts) => {{
+                        let clicked = false;
+                        const nodes = Array.from(document.querySelectorAll('button, a, span, div, [role="button"]'));
+                        for (const node of nodes) {{
+                          const text = (node.innerText || node.textContent || '').trim().toLowerCase();
+                          if (texts.some(t => text.includes(t))) {{
+                            try {{ node.click(); }} catch(e) {{}}
+                            clicked = true;
+                          }}
+                        }}
+                        return clicked;
+                      }};
+                      clickByText({json.dumps(common_click_labels)});
+                      return 'ok';
+                    }})();
+                    """,
+                },
+                {"type": "wait", "milliseconds": 2000},
+                {"type": "scroll", "direction": "down"},
+                {"type": "wait", "milliseconds": 1000},
             ]
+
+        # Para ZonaProp: aún más agresivo
         return [
             {"type": "wait", "milliseconds": 1800},
             {
                 "type": "executeJavascript",
-                "script": """
-                (() => {
-                  const clickByText = (texts) => {
-                    const nodes = Array.from(document.querySelectorAll('button, a, span, div'));
-                    for (const node of nodes) {
+                "script": f"""
+                (() => {{
+                  const clickByText = (texts) => {{
+                    let clicked = false;
+                    const nodes = Array.from(document.querySelectorAll('button, a, span, div, [role="button"]'));
+                    for (const node of nodes) {{
                       const text = (node.innerText || node.textContent || '').trim().toLowerCase();
-                      if (texts.some(t => text.includes(t))) {
-                        node.click();
-                        return true;
-                      }
-                    }
-                    return false;
-                  };
-                  clickByText(['aceptar', 'entendido']);
-                  clickByText(['leer descripción completa', 'leer descripcion completa', 'ver descripción completa', 'leer más', 'ver más']);
-                  clickByText(['ver todas las fotos', 'ver fotos', 'más fotos']);
+                      if (texts.some(t => text.includes(t))) {{
+                        try {{ node.click(); }} catch(e) {{}}
+                        clicked = true;
+                      }}
+                    }}
+                    return clicked;
+                  }};
+                  clickByText({json.dumps(common_click_labels)});
                   return 'ok';
-                })();
+                }})();
                 """,
             },
             {"type": "wait", "milliseconds": 2200},
@@ -996,22 +1132,47 @@ class ScraperService:
             {"type": "wait", "milliseconds": 800},
             {
                 "type": "executeJavascript",
-                "script": """
-                (() => {
-                  const clickByText = (texts) => {
-                    const nodes = Array.from(document.querySelectorAll('button, a, span, div'));
-                    for (const node of nodes) {
+                "script": f"""
+                (() => {{
+                  const clickByText = (texts) => {{
+                    let clicked = false;
+                    const nodes = Array.from(document.querySelectorAll('button, a, span, div, [role="button"]'));
+                    for (const node of nodes) {{
                       const text = (node.innerText || node.textContent || '').trim().toLowerCase();
-                      if (texts.some(t => text.includes(t))) {
-                        node.click();
-                        return true;
-                      }
-                    }
-                    return false;
-                  };
-                  clickByText(['ver todas las fotos', 'ver fotos', 'más fotos']);
+                      if (texts.some(t => text.includes(t))) {{
+                        try {{ node.click(); }} catch(e) {{}}
+                        clicked = true;
+                      }}
+                    }}
+                    return clicked;
+                  }};
+                  clickByText({json.dumps(common_click_labels)});
                   return 'ok';
-                })();
+                }})();
+                """,
+            },
+            {"type": "wait", "milliseconds": 2200},
+            {"type": "scroll", "direction": "down"},
+            {"type": "wait", "milliseconds": 1000},
+            {
+                "type": "executeJavascript",
+                "script": f"""
+                (() => {{
+                  const clickByText = (texts) => {{
+                    let clicked = false;
+                    const nodes = Array.from(document.querySelectorAll('button, a, span, div, [role="button"]'));
+                    for (const node of nodes) {{
+                      const text = (node.innerText || node.textContent || '').trim().toLowerCase();
+                      if (texts.some(t => text.includes(t))) {{
+                        try {{ node.click(); }} catch(e) {{}}
+                        clicked = true;
+                      }}
+                    }}
+                    return clicked;
+                  }};
+                  clickByText({json.dumps(common_click_labels)});
+                  return 'ok';
+                }})();
                 """,
             },
             {"type": "wait", "milliseconds": 2200},
@@ -1547,6 +1708,7 @@ class ScraperService:
             "metros_totales": None, "metros_cubiertos": None,
             "ambientes": None, "banos": None, "dormitorios": None,
             "estado": None, "disposicion": None, "orientacion": None,
+            "cocheras": None, "antiguedad": None,
         }
 
         if html:
@@ -1582,6 +1744,15 @@ class ScraperService:
                 if not values["orientacion"]:
                     m = re.search(r"\b(Norte|Sur|Este|Oeste|NE|NO|SE|SO|^[NSEO]$)\b", t, re.I)
                     if m: values["orientacion"] = m.group(1)
+                if not values["cocheras"]:
+                    m = re.search(r"(\d+)\s*coch\.?", t, re.I)
+                    if m: values["cocheras"] = m.group(1)
+                if not values["antiguedad"]:
+                    m = re.search(r"(\d+)\s*años?", t, re.I)
+                    if m: values["antiguedad"] = m.group(1)
+                if not values.get("luminosidad"):
+                    m = re.search(r"\b(Muy luminoso|Luminoso|Poco luminoso)\b", t, re.I)
+                    if m: values["luminosidad"] = m.group(1)
 
             split_values = ScraperService._extract_split_detail_candidates(ScraperService._html_to_text(html))
             for key, value in split_values.items():
@@ -1622,6 +1793,15 @@ class ScraperService:
             if not values["orientacion"]:
                 m = re.search(r"\b(Norte|Sur|Este|Oeste|NE|NO|SE|SO)\b", line, re.I)
                 if m: values["orientacion"] = m.group(1)
+            if not values["cocheras"]:
+                m = re.search(r"(\d+)\s*coch\.?", line, re.I)
+                if m: values["cocheras"] = m.group(1)
+            if not values["antiguedad"]:
+                m = re.search(r"(\d+)\s*años?", line, re.I)
+                if m: values["antiguedad"] = m.group(1)
+            if not values.get("luminosidad"):
+                m = re.search(r"\b(Muy luminoso|Luminoso|Poco luminoso)\b", line, re.I)
+                if m: values["luminosidad"] = m.group(1)
         split_values = ScraperService._extract_split_detail_candidates(text)
         for key, value in split_values.items():
             if value and not values.get(key):
