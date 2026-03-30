@@ -1,4 +1,7 @@
 import os
+from dotenv import load_dotenv
+load_dotenv()  # Cargar variables de entorno desde .env
+
 import queue
 import re
 import secrets
@@ -120,11 +123,11 @@ def _cleanup_stale_jobs():
             JOBS.pop(k, None)
 VALID_CLIENT_TYPES = {"depto", "ph", "casa", "lote", "oficina", "otro"}
 VALID_CLIENT_ESTADOS = {
-    "new_lead", "contacted", "visited_property",
-    "negotiating", "closed", "lost",
+    "nuevo_lead", "contactado", "visito_propiedad",
+    "negociando", "cerrado", "perdido",
 }
 VALID_CLIENT_ACCIONES = {
-    "", "call", "send_properties", "schedule_visit", "follow_up", "wait_response",
+    "", "llamar", "enviar_propiedades", "coordinar_visita", "seguimiento", "esperar_respuesta",
 }
 VALID_CLIENT_ZONAS = {
     "agronomia", "almagro", "balvanera", "barracas", "belgrano", "boedo", "caballito",
@@ -185,9 +188,9 @@ def _sanitize_client_payload(data: dict) -> tuple[bool, dict | str]:
         return False, "Teléfono inválido"
 
     # ── Pipeline status (enum) ──
-    estado = (data.get("estado") or "new_lead").strip().lower()
+    estado = (data.get("estado") or "nuevo_lead").strip().lower()
     if estado not in VALID_CLIENT_ESTADOS:
-        estado = "new_lead"
+        estado = "nuevo_lead"
 
     # ── Next action (enum + optional date) ──
     proxima_accion = (data.get("proxima_accion") or "").strip().lower()
@@ -218,7 +221,11 @@ def _sanitize_client_payload(data: dict) -> tuple[bool, dict | str]:
             ambientes_max = None
     if ambientes_min and ambientes_max and ambientes_min > ambientes_max:
         ambientes_min, ambientes_max = ambientes_max, ambientes_min
-    apto_credito_value = (data.get("apto_credito") or "").strip().lower()
+    apto_credito_raw = data.get("apto_credito")
+    if isinstance(apto_credito_raw, bool):
+        apto_credito_value = "si" if apto_credito_raw else "no"
+    else:
+        apto_credito_value = str(apto_credito_raw or "").strip().lower()
     if apto_credito_value not in {"si", "no", "indiferente"}:
         apto_credito_value = "indiferente"
 
@@ -681,6 +688,25 @@ def permanent_delete_property(property_id: int):
     return jsonify({"ok": True})
 
 
+@app.route("/api/propiedades/papelera/vaciar", methods=["DELETE"])
+@login_required
+@csrf_protect
+def empty_trash_properties():
+    username = session["username"]
+    from db import get_connection
+    try:
+        with get_connection() as conn:
+            conn.execute("DELETE FROM properties WHERE owner_username = ? AND deleted_at IS NOT NULL", (username,))
+            # Si no quedan propiedades en la tabla, resetear el autoincrement
+            row = conn.execute("SELECT COUNT(*) FROM properties").fetchone()
+            if row[0] == 0:
+                conn.execute("DELETE FROM sqlite_sequence WHERE name='properties'")
+            conn.commit()
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    return jsonify({"ok": True})
+
+
 @app.route("/api/clientes", methods=["GET"])
 @login_required
 def list_clients():
@@ -748,6 +774,32 @@ def restore_client(client_id: int):
 def trash_clients():
     username = session["username"]
     return jsonify(client_repo.list_deleted_clients(owner_username=username))
+
+
+@app.route("/api/clientes/<int:client_id>/eliminar-definitivo", methods=["DELETE"])
+@login_required
+@csrf_protect
+def permanent_delete_client(client_id: int):
+    username = session["username"]
+    deleted = client_repo.delete_client(client_id=client_id, owner_username=username)
+    if not deleted:
+        return jsonify({"error": "Cliente no encontrado"}), 404
+    return jsonify({"ok": True})
+
+
+@app.route("/api/clientes/papelera/vaciar", methods=["DELETE"])
+@login_required
+@csrf_protect
+def empty_trash_clients():
+    username = session["username"]
+    from db import get_connection
+    try:
+        with get_connection() as conn:
+            conn.execute("DELETE FROM clients WHERE owner_username = ? AND deleted_at IS NOT NULL", (username,))
+            conn.commit()
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    return jsonify({"ok": True})
 
 
 # ── Client-Property Interests ──────────────────
