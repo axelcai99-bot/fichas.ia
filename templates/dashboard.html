@@ -1015,7 +1015,7 @@ function escucharLogs(jobId) {
     document.getElementById('log-spinner').style.display = 'none';
     document.getElementById('log-status').textContent = '✓ Completado';
     resetBtn();
-    const url = e.data.trim();
+    const url = buildAbsolutePropertyUrl(e.data.trim());
     if (url) {
       currentUrl = url;
       document.getElementById('result-link').textContent = url;
@@ -1048,6 +1048,15 @@ function resetBtn() {
   const btn = document.getElementById('btn-generar');
   btn.disabled = false;
   btn.innerHTML = '🚀 Generar Ficha Ahora';
+}
+
+function buildAbsolutePropertyUrl(url) {
+  if (!url) return '';
+  try {
+    return new URL(url, window.location.origin).toString();
+  } catch (e) {
+    return url;
+  }
 }
 
 function copiarLink() {
