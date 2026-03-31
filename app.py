@@ -577,15 +577,66 @@ def property_detail(property_id: int):
         survey_url = f"{form_url}{sep}entry.0={urllib.parse.quote(prop.get('ubicacion') or prop.get('titulo') or '')}"
 
     detalles = prop.get("detalles", {}) or {}
+    info_adicional = prop.get("info_adicional", {}) or {}
+
+    def _parse_coord(*values):
+        for value in values:
+            if value in (None, ""):
+                continue
+            try:
+                return float(str(value).strip())
+            except (TypeError, ValueError):
+                continue
+        return None
+
+    latitude = _parse_coord(
+        prop.get("latitude"),
+        prop.get("latitud"),
+        detalles.get("latitude"),
+        detalles.get("latitud"),
+        detalles.get("lat"),
+        info_adicional.get("latitude"),
+        info_adicional.get("latitud"),
+        info_adicional.get("lat"),
+    )
+    longitude = _parse_coord(
+        prop.get("longitude"),
+        prop.get("longitud"),
+        detalles.get("longitude"),
+        detalles.get("longitud"),
+        detalles.get("lng"),
+        detalles.get("lon"),
+        info_adicional.get("longitude"),
+        info_adicional.get("longitud"),
+        info_adicional.get("lng"),
+        info_adicional.get("lon"),
+    )
+
+    map_embed_url = ""
+    maps_url = ""
+    map_location_label = (prop.get("ubicacion") or "").strip()
+    if latitude is not None and longitude is not None:
+        coords_query = f"{latitude},{longitude}"
+        maps_url = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(coords_query)}"
+        map_embed_url = f"https://www.google.com/maps?q={urllib.parse.quote(coords_query)}&z=16&output=embed"
+        if not map_location_label:
+            map_location_label = coords_query
+    elif map_location_label and map_location_label.lower() != "ver en el portal":
+        maps_url = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(map_location_label)}"
+        map_embed_url = f"https://www.google.com/maps?q={urllib.parse.quote(map_location_label)}&z=16&output=embed"
 
     return render_template(
         "property_detail.html",
         prop=prop,
         images=images,
         detalles=detalles,
+        info_adicional=info_adicional,
         descripcion_parts=descripcion_parts,
         wa_msg=wa_msg,
         survey_url=survey_url,
+        map_embed_url=map_embed_url,
+        maps_url=maps_url,
+        map_location_label=map_location_label,
         inicial=(prop.get("agent_name") or "A")[0].upper(),
     )
 
