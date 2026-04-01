@@ -322,10 +322,7 @@ class ScraperService:
                 # Recorrer el JSON buscando todas las strings que parezcan imágenes
                 ScraperService._collect_image_strings_from_json(data, candidates)
 
-        # Deduplicar primero (preserva el orden de la galería principal),
-        # luego mejorar resolución para descargar en alta calidad.
-        filtered = ScraperService._filter_image_urls(candidates, strict=True)
-        return [ScraperService._enhance_image_url_resolution(u) for u in filtered]
+        return ScraperService._filter_image_urls(candidates, strict=True)
 
     # Claves JSON cuyo valor es probablemente una URL de foto de propiedad.
     _PHOTO_KEY_HINTS: frozenset[str] = frozenset({
