@@ -113,7 +113,7 @@ class PropertyRepository:
             total = count_row["total"] if count_row else 0
             rows = conn.execute(
                 f"""
-                SELECT id, titulo, precio, ubicacion, created_at, owner_username, source_portal
+                SELECT id, titulo, precio, ubicacion, created_at, owner_username, source_portal, source_url
                 FROM properties WHERE {where}
                 ORDER BY created_at DESC
                 LIMIT ? OFFSET ?
@@ -129,10 +129,21 @@ class PropertyRepository:
                 "created_at": r["created_at"],
                 "owner_username": r["owner_username"] or "admin",
                 "source_portal": r["source_portal"] or "zonaprop",
+                "source_url": r["source_url"] or "",
             }
             for r in rows
         ]
         return {"items": items, "total": total, "limit": limit, "offset": offset}
+
+    def soft_delete_all_properties(self, owner_username: str) -> int:
+        now = datetime.now().isoformat()
+        with get_connection() as conn:
+            cur = conn.execute(
+                "UPDATE properties SET deleted_at = ? WHERE owner_username = ? AND deleted_at IS NULL",
+                (now, owner_username),
+            )
+            conn.commit()
+            return cur.rowcount
 
     def soft_delete_property(self, property_id: int, owner_username: str | None = None) -> bool:
         now = datetime.now().isoformat()
