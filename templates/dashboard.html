@@ -447,7 +447,6 @@ body {
 
   .admin-head { flex-direction: column; }
   .admin-head .btn { width: 100%; justify-content: center; }
-
   .toast { left: 16px; right: 16px; bottom: 16px; min-width: 0; }
 }
 </style>
@@ -582,9 +581,7 @@ body {
             <p class="note">Fichas disponibles actualmente en el sistema local</p>
           </div>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-            <select class="input" id="portal-filter" style="min-width:170px;padding:8px 10px" onchange="cargarPropiedadesActivas()">
-              <option value="">Todos los portales</option>
-            </select>
+            <button class="btn btn-danger" style="padding:8px 12px" onclick="eliminarTodasPropiedadesActivas()">Borrar todo</button>
             <button class="btn btn-ghost" style="padding:8px 12px" onclick="cargarPropiedadesActivas()">Recargar</button>
           </div>
         </div>
@@ -594,11 +591,11 @@ body {
               <tr>
                 <th>N°</th>
                 <th>Propiedad</th>
-                <th>Portal</th>
                 <th>Precio</th>
                 <th>Ubicación</th>
+                <th>Link original</th>
                 <th>Creada</th>
-                <th>Acciones</th>
+                <th>Borrar</th>
               </tr>
             </thead>
             <tbody id="properties-body">
@@ -1075,36 +1072,13 @@ function abrirWpp() {
   window.open(`https://web.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
 }
 
-/* ── Portales dinámicos ───────────── */
-async function cargarPortales() {
-  const sel = document.getElementById('portal-filter');
-  if (!sel) return;
-  const prev = sel.value;
-  try {
-    const res = await fetch('/api/portales');
-    if (!res.ok) return;
-    const portals = await res.json();
-    sel.innerHTML = '<option value="">Todos los portales</option>';
-    portals.forEach(p => {
-      const opt = document.createElement('option');
-      opt.value = p;
-      opt.textContent = p.charAt(0).toUpperCase() + p.slice(1);
-      sel.appendChild(opt);
-    });
-    if (prev && portals.includes(prev)) sel.value = prev;
-  } catch (e) { /* silent */ }
-}
-
 /* ── Propiedades activas ───────────── */
 async function cargarPropiedadesActivas(page) {
   if (page !== undefined) propPage = page;
-  cargarPortales();
   const tbody = document.getElementById('properties-body');
   if (!tbody) return;
   try {
-    const portal = document.getElementById('portal-filter')?.value || '';
     let q = `?page=${propPage}&per_page=${propPerPage}`;
-    if (portal) q += `&portal=${encodeURIComponent(portal)}`;
     const res = await fetch('/propiedades' + q);
     if (!res.ok) throw new Error('error');
     const data = await res.json();
@@ -1119,17 +1093,25 @@ async function cargarPropiedadesActivas(page) {
     tbody.innerHTML = props.map((p, idx) => {
       const date = new Date(p.created_at);
       const dateLabel = isNaN(date.getTime()) ? '-' : date.toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' });
-      const portal = p.source_portal || '-';
+      const sourceUrl = p.source_url || '';
+      const escapedUrl = JSON.stringify(sourceUrl);
       return `
         <tr>
           <td>${startNum - idx}</td>
           <td><a href="/propiedad/${p.id}" target="_blank" style="color:#7fa0e8;text-decoration:none">${p.titulo || 'Sin título'}</a></td>
-          <td style="text-transform:capitalize">${portal}</td>
           <td>${p.precio || '-'}</td>
           <td>${p.ubicacion || '-'}</td>
+          <td>${sourceUrl ? `<button class="btn btn-ghost" style="padding:6px 10px;font-size:12px" onclick='copiarLinkPropiedad(${escapedUrl})'>Copiar link</button>` : '-'}</td>
           <td>${dateLabel}</td>
           <td>
-            <button class="btn btn-danger" style="padding:6px 10px;font-size:12px" onclick="eliminarPropiedad(${p.id})">🗑</button>
+            <button class="btn btn-danger" style="padding:6px 8px;font-size:12px;line-height:1;display:inline-flex;align-items:center;justify-content:center" onclick="eliminarPropiedad(${p.id})" title="Mover a papelera" aria-label="Mover a papelera">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M4 7h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                <path d="M9 3h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                <path d="M10 11v6M14 11v6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                <path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
           </td>
         </tr>
       `;
@@ -1166,6 +1148,34 @@ async function eliminarPropiedad(id) {
     cargarPropiedadesActivas();
   } catch (e) {
     toast('Error de red al eliminar', 'err');
+  }
+}
+
+async function eliminarTodasPropiedadesActivas() {
+  if (!confirm('¿Mover todas las propiedades activas a la papelera?')) return;
+  try {
+    const res = await fetch('/api/propiedades', { method: 'DELETE', headers: csrfHeaders() });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      toast(data.error || 'No se pudieron borrar las propiedades', 'err');
+      return;
+    }
+    const deletedCount = Number(data.deleted_count || 0);
+    toast(deletedCount ? `${deletedCount} propiedades movidas a papelera` : 'No había propiedades activas para borrar');
+    propPage = 1;
+    cargarPropiedadesActivas();
+  } catch (e) {
+    toast('Error de red al borrar todo', 'err');
+  }
+}
+
+async function copiarLinkPropiedad(url) {
+  if (!url) return;
+  try {
+    await navigator.clipboard.writeText(url);
+    toast('Link copiado');
+  } catch (e) {
+    toast('No se pudo copiar el link', 'err');
   }
 }
 
