@@ -100,7 +100,7 @@ body{font-family:'Inter',sans-serif;background:radial-gradient(circle at top lef
 
   <div class="gallery-wrap">
     <div class="gallery-grid">
-      <div class="gallery-main" onclick="openModal()">
+      <div class="gallery-main" onclick="openModal(0)">
         {% if images %}
         <img src="{{ images[0] }}" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22400%22 height=%22300%22><rect fill=%22%23ddd%22 width=%22400%22 height=%22300%22/></svg>'" alt="Foto 1">
         {% endif %}
@@ -121,7 +121,7 @@ body{font-family:'Inter',sans-serif;background:radial-gradient(circle at top lef
       </div>
     </div>
     {% if images|length > 1 %}
-    <button class="gallery-btn-all" onclick="openModal()">
+    <button class="gallery-btn-all" onclick="openModal(0)">
       &#9632;&nbsp; Ver todas las fotos ({{ images|length }})
     </button>
     {% endif %}
