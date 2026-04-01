@@ -584,10 +584,28 @@ def property_detail(property_id: int):
             if value in (None, ""):
                 continue
             try:
-                return float(str(value).strip())
+                normalized = str(value).strip().replace(",", ".")
+                return float(normalized)
             except (TypeError, ValueError):
                 continue
         return None
+
+    def _normalize_map_query(location: str) -> str:
+        value = re.sub(r"\s+", " ", (location or "").strip(" ,"))
+        if not value:
+            return ""
+        value = re.sub(r"\bal\s+(\d{3,5})\b", r" \1", value, flags=re.I)
+        parts = [part.strip(" ,") for part in value.split(",") if part.strip(" ,")]
+        if len(parts) >= 4 and "argentina" in parts[2].lower():
+            # Reordenar barrio antes de ciudad/país mejora la geocodificación.
+            parts = [parts[0], parts[3], parts[1], parts[2]]
+        return ", ".join(dict.fromkeys(parts))
+
+    def _build_google_embed(query, zoom=16):
+        return (
+            "https://maps.google.com/maps?"
+            f"hl=es&q={urllib.parse.quote(query)}&z={zoom}&ie=UTF8&iwloc=B&output=embed"
+        )
 
     latitude = _parse_coord(
         prop.get("latitude"),
@@ -615,15 +633,19 @@ def property_detail(property_id: int):
     map_embed_url = ""
     maps_url = ""
     map_location_label = (prop.get("ubicacion") or "").strip()
+    map_query = _normalize_map_query(map_location_label)
     if latitude is not None and longitude is not None:
         coords_query = f"{latitude},{longitude}"
         maps_url = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(coords_query)}"
-        map_embed_url = f"https://www.google.com/maps?q={urllib.parse.quote(coords_query)}&z=16&output=embed"
+        exact_query = coords_query
+        if map_query and map_query.lower() != "ver en el portal":
+            exact_query = f"{map_query} ({coords_query})"
+        map_embed_url = _build_google_embed(exact_query)
         if not map_location_label:
             map_location_label = coords_query
-    elif map_location_label and map_location_label.lower() != "ver en el portal":
-        maps_url = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(map_location_label)}"
-        map_embed_url = f"https://www.google.com/maps?q={urllib.parse.quote(map_location_label)}&z=16&output=embed"
+    elif map_query and map_query.lower() != "ver en el portal":
+        maps_url = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(map_query)}"
+        map_embed_url = _build_google_embed(map_query)
 
     return render_template(
         "property_detail.html",
