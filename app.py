@@ -36,10 +36,15 @@ from repositories.user_repository import UserRepository
 from services.auth_service import AuthService
 from services.property_service import PropertyService
 from services.scraper_service import ScraperService
+import config
 
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-app = Flask(__name__)
+app = Flask(
+    __name__,
+    template_folder=os.path.join(BASE_DIR, "templates"),
+    static_folder=os.path.join(BASE_DIR, "static"),
+)
 _secret = os.environ.get("SECRET_KEY", "").strip()
 if not _secret:
     import warnings
@@ -637,10 +642,9 @@ def property_detail(property_id: int):
     if latitude is not None and longitude is not None:
         coords_query = f"{latitude},{longitude}"
         maps_url = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(coords_query)}"
-        exact_query = coords_query
-        if map_query and map_query.lower() != "ver en el portal":
-            exact_query = f"{map_query} ({coords_query})"
-        map_embed_url = _build_google_embed(exact_query)
+        # Cuando hay coordenadas, usar solo lat/lng evita que Google convierta
+        # la consulta en una búsqueda ambigua y omita el pin exacto.
+        map_embed_url = _build_google_embed(coords_query)
         if not map_location_label:
             map_location_label = coords_query
     elif map_query and map_query.lower() != "ver en el portal":
@@ -696,26 +700,15 @@ def proxy_image():
     abort(502)
 
 
-@app.route("/api/portales")
-@login_required
-def portals_list():
-    username = session["username"]
-    portals = property_repo.list_portals(owner_username=username)
-    return jsonify(portals)
-
-
 @app.route("/propiedades")
 @login_required
 def properties_list():
     username = session["username"]
-    portal = (request.args.get("portal") or "").strip().lower()
     page = max(1, int(request.args.get("page") or 1))
     per_page = min(100, max(1, int(request.args.get("per_page") or 20)))
-    available = property_repo.list_portals(owner_username=username)
-    source_portal = portal if portal in available else None
     result = property_repo.list_properties(
         limit=per_page, offset=(page - 1) * per_page,
-        owner_username=username, source_portal=source_portal,
+        owner_username=username,
     )
     return jsonify(result)
 
@@ -729,6 +722,15 @@ def delete_property(property_id: int):
     if not deleted:
         return jsonify({"error": "Propiedad no encontrada"}), 404
     return jsonify({"ok": True})
+
+
+@app.route("/api/propiedades", methods=["DELETE"])
+@login_required
+@csrf_protect
+def delete_all_properties():
+    username = session["username"]
+    deleted_count = property_repo.soft_delete_all_properties(owner_username=username)
+    return jsonify({"ok": True, "deleted_count": deleted_count})
 
 
 @app.route("/api/propiedades/<int:property_id>/restaurar", methods=["POST"])

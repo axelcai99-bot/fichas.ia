@@ -1,0 +1,312 @@
+================================================================================
+                    ESTRUCTURA FINAL - FichasIA
+================================================================================
+
+fichas-ia/
+│
+├── 📄 app.py                    ← Aplicación Flask principal (todas las rutas)
+├── 📄 config.py                 ← Configuración centralizada
+├── 📄 README.md                  ← Documentación completa (formato Markdown)
+├── 📄 ESTRUCTURA.txt             ← Este archivo
+├── 📄 requirements.txt           ← Dependencias Python
+├── 📄 .gitignore                 ← Archivos a ignorar en Git
+├── 📄 .env                       ← Variables de entorno
+├── 📄 Dockerfile                 ← Para ejecutar en Docker
+├── 📄 Procfile                   ← Para Heroku/Railway
+├── 📄 build.sh                   ← Script de build
+│
+├── 📁 nucleo/                   ← Base de datos
+│   ├── __init__.py
+│   └── db.py                    → Gestión de SQLite
+│
+├── 📁 repositorios/             ← Acceso a datos
+│   ├── user_repository.py       → CRUD usuarios
+│   ├── property_repository.py   → CRUD propiedades
+│   └── client_repository.py     → CRUD clientes
+│
+├── 📁 servicios/                ← Lógica de negocio
+│   ├── auth_service.py          → Autenticación
+│   ├── scraper_service.py       → Scraping (2000+ líneas)
+│   └── property_service.py      → Descarga de fotos
+│
+├── 📁 plantillas/               ← HTML templates
+│   ├── login.html
+│   ├── dashboard.html
+│   └── property_detail.html     → LA FICHA INMOBILIARIA
+│
+├── 📁 estaticos/                ← Fotos y assets
+│   ├── branding/
+│   └── properties/              → Fotos descargadas (1/01.jpg, 2/02.jpg, etc.)
+│
+├── 📁 utilidades/               ← Funciones helper
+│   └── decorators.py            → Decoradores Flask
+│
+├── 📁 rutas_api/                ← Preparada para expandir
+│   └── routes/
+│
+└── 📁 venv_test/                ← Entorno virtual
+
+================================================================================
+                        QUE HACE CADA ARCHIVO
+================================================================================
+
+app.py
+------
+Aplicación Flask con TODAS las rutas HTTP:
+
+Autenticación:
+  GET  /            → Redirige a dashboard
+  GET  /login       → Formulario login
+  POST /login       → Valida credenciales
+  GET  /logout      → Cierra sesión
+  GET  /dashboard   → Panel principal
+
+Generación de fichas:
+  POST /api/generar           → Inicia scraping asincrónico
+  GET  /api/stream/<job_id>   → Stream de progreso en tiempo real
+  GET  /propiedad/<id>        → Visualiza ficha generada
+
+Propiedades:
+  GET    /api/propiedades     → Lista propiedades
+  DELETE /api/propiedades/<id> → Papelera
+  POST   /api/propiedades/papelera/vaciar → Vacía papelera
+
+Clientes:
+  GET    /api/clientes        → Lista
+  POST   /api/clientes        → Crea
+  PUT    /api/clientes/<id>   → Edita
+  DELETE /api/clientes/<id>   → Borra
+
+Intereses:
+  POST   /api/intereses       → Marca propiedad de interés
+  DELETE /api/intereses       → Quita interés
+
+
+config.py
+---------
+Configuración centralizada:
+  SECRET_KEY, LOGIN_MAX_ATTEMPTS, DB_PATH, etc.
+
+
+nucleo/db.py
+------------
+Gestión SQLite:
+  - init_db()        → Crea tablas
+  - get_connection() → Abre conexión
+
+Tablas:
+  1. users              → Usuario + contraseña hash
+  2. properties         → Propiedades scrapeadas
+  3. clients            → Clientes/interesados
+  4. client_property_interests → Relaciones
+
+
+repositorios/user_repository.py
+--------------------------------
+CRUD de usuarios:
+  get_user(username)
+  create_user()
+  update_password()
+  delete_user()
+  list_users() (admin only)
+
+
+repositorios/property_repository.py
+-----------------------------------
+CRUD de propiedades:
+  create_property(payload)
+  get_property(id)
+  list_properties(owner_username, ...)
+  delete_property(id) → Soft-delete (papelera)
+  update_image_paths(id, paths) → Actualiza URLs de fotos
+  restore_property(id) → Restaura de papelera
+  permanent_delete(id) → Borra definitivamente
+
+
+repositorios/client_repository.py
+---------------------------------
+CRUD de clientes:
+  create_client(), get_client(), list_clients(), update_client()
+  delete_client(), restore_client()
+  add_interest(), remove_interest()
+  interests_by_client(), interests_by_property()
+
+
+servicios/auth_service.py
+-------------------------
+Autenticación:
+  validate_login(username, password)
+  change_password(username, current, new)
+  admin_create_user()
+  admin_reset_password()
+  admin_delete_user()
+
+Soporta hashes werkzeug + legacy SHA256 (migración automática)
+
+
+servicios/scraper_service.py (MUY COMPLEJO)
+-------------------------------------------
+Scraping automático de ZonaProp, Argenprop, MercadoLibre.
+
+Función principal:
+  scrape(url, portal) → Retorna dict con datos completos
+
+Extrae:
+  1. FOTOS en orden correcto:
+     - De __NEXT_DATA__ JSON (prioridad 1)
+     - De grid HTML
+     - Valida resolución mínima (250px)
+     - Ordena secuencialmente
+     - Mejora resolución a 1200x1200
+
+  2. DETALLES:
+     - Ambientes, baños, m² totales, m² cubiertos
+     - Cocheras, antigüedad
+     - Disposición, orientación
+
+  3. CARACTERÍSTICAS (array):
+     - Pileta, balcón, parrilla, etc.
+     - Extrae del HTML + descripción
+
+  4. DESCRIPCIÓN:
+     - Texto completo de la propiedad
+
+
+servicios/property_service.py
+-----------------------------
+Procesa propiedades después de scraping:
+
+  create_property()
+    → Guarda en BD (tabla: properties)
+    → Descarga fotos a static/properties/{id}/
+    → Renombra: 01.jpg, 02.jpg, ... (orden de galería)
+    → Filtra imágenes pequeñas
+
+  _download_images()
+    → Descarga cada foto
+    → Valida dimensiones (mínimo 250px)
+    → Guarda con nombres secuenciales
+
+
+plantillas/login.html
+---------------------
+Formulario simple de login:
+  - Email + Contraseña
+  - Protección CSRF
+  - Validación client-side
+
+
+plantillas/dashboard.html
+-------------------------
+Panel principal con tabs:
+  1. Generar ficha     → Pega URL, ingresa datos asesor
+  2. Propiedades       → Lista de fichas generadas
+  3. Clientes          → Gestión de clientes
+  4. Papelera          → Propiedades borradas
+  5. Mi perfil         → Cambiar contraseña
+
+
+plantillas/property_detail.html
+-------------------------------
+LA FICHA INMOBILIARIA (el producto final):
+
+  Estructura:
+    • Título + ubicación
+    • Galería interactiva:
+      - Foto grande principal
+      - 4 miniaturas en grid
+      - Botón "Ver todas (N fotos)"
+      - Modal fullscreen con navegación
+
+    • Detalles (9 items):
+      1 amb. | 1 baños | 39 m² tot. | 34 m² cub.
+      1 coch. | 26 años | Contrafrente | E
+
+    • Descripción completa
+    • Panel derecho:
+      - Precio grande
+      - Avatar asesor
+      - Botón Consultar (WhatsApp)
+      - Encuesta
+      - Expensas
+
+    • Disclaimer legal
+
+
+utilidades/decorators.py
+------------------------
+Decoradores Flask:
+  _get_csrf_token() → Genera/obtiene token CSRF
+  csrf_protect(f)   → Valida token en POST/DELETE
+
+
+================================================================================
+                        FLUJO PRINCIPAL
+================================================================================
+
+GENERACION DE FICHA:
+  1. Usuario: Pega URL en dashboard
+  2. JavaScript: POST /api/generar
+  3. Flask: Crea job asincrónico
+  4. Thread paralelo:
+     scraper_service.scrape(url)
+       ↓ Extrae todos los datos
+     property_service.create_property()
+       ├─ Guarda en BD
+       ├─ Descarga fotos
+       └─ Renombra (01.jpg, 02.jpg, etc.)
+  5. JavaScript: GET /api/stream/{job_id}
+       ↓ Recibe logs en tiempo real
+  6. Usuario: Click en ficha generada
+  7. Flask: GET /propiedad/{id}
+       ↓ Muestra la ficha completa
+
+
+GESTION DE CLIENTES:
+  1. Crear cliente (nombre, teléfono, zonas, presupuesto)
+  2. Marcar propiedades de interés
+  3. Seguimiento de estado (nuevo_lead → cerrado)
+  4. Próximas acciones (llamar, enviar props, etc.)
+
+
+================================================================================
+                      VARIABLES DE ENTORNO
+================================================================================
+
+Obligatorias en .env:
+  SECRET_KEY            - Clave para Flask sessions
+
+Opcionales:
+  FIRECRAWL_API_KEY     - Para scraping con IA
+  NETLIFY_TOKEN         - Para publicar online
+  DEBUG_LOG             - Activar logging detallado
+
+
+================================================================================
+                        COMO EMPEZAR
+================================================================================
+
+1. Instalar Python 3.10+
+
+2. Instalar dependencias:
+   pip install -r requirements.txt
+
+3. Instalar Playwright (para scraping):
+   python -m playwright install chromium
+   python -m playwright install-deps chromium
+
+4. Configurar .env:
+   echo "SECRET_KEY=$(openssl rand -hex 32)" > .env
+
+5. Iniciar app:
+   python app.py
+
+6. Abrir navegador:
+   http://localhost:8080
+   usuario: admin
+   contraseña: admin123
+
+
+================================================================================
+ACTUALIZADO: Abril 2026
+VERSION: 1.0

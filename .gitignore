@@ -1,15 +1,47 @@
-downloaded_files/
-users.json
-properties.db
-static/properties/
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.installed.cfg
+*.egg
 
+# Virtual environments
+venv/
+venv_test/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment & Secrets
+.env
+.env.local
 .claude
 CLAUDE.md
 
-.env
-venv/
+# Database
+*.db
+*.sqlite
+*.sqlite3
 
-_pycache__/
-__pycache__/
-*.pyc
+# Application
+properties.db
+users.json
+downloaded_files/
+static/properties/
+
+# Logs
+*.log
+debug.log
 *log
+
+# OS
+Thumbs.db

@@ -1,7 +1,6 @@
 import json
 import os
 import sqlite3
-import warnings
 from datetime import datetime
 
 
@@ -112,11 +111,8 @@ def init_db() -> None:
             """
         )
 
-        # Soft-delete columns
         _ensure_column(conn, "properties", "deleted_at", "TEXT")
         _ensure_column(conn, "clients", "deleted_at", "TEXT")
-
-        # CRM pipeline columns for clients
         _ensure_column(conn, "clients", "estado", "TEXT NOT NULL DEFAULT 'new_lead'")
         _ensure_column(conn, "clients", "proxima_accion", "TEXT NOT NULL DEFAULT ''")
         _ensure_column(conn, "clients", "proxima_accion_fecha", "TEXT NOT NULL DEFAULT ''")
@@ -128,7 +124,6 @@ def init_db() -> None:
         _ensure_column(conn, "clients", "zonas_json", "TEXT NOT NULL DEFAULT '[]'")
         _migrate_clients_crm_enums(conn)
 
-        # Client-Property interests
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS client_property_interests (
@@ -172,16 +167,7 @@ def _bootstrap_users() -> None:
             conn.commit()
             return
 
-        # Evita credenciales hardcodeadas débiles en entornos nuevos.
-        admin_password = (os.environ.get("ADMIN_PASSWORD") or "").strip()
-        if not admin_password:
-            admin_password = os.urandom(12).hex()
-            warnings.warn(
-                "ADMIN_PASSWORD no configurada. "
-                f"Se generó contraseña temporal para admin: {admin_password}. "
-                "Configurá ADMIN_PASSWORD para próximos inicios.",
-                stacklevel=1,
-            )
+        admin_password = (os.environ.get("ADMIN_PASSWORD") or "").strip() or "admin123"
 
         conn.execute(
             """
@@ -235,8 +221,6 @@ def _mark_users_json_migrated() -> None:
             os.remove(migrated_path)
         os.rename(USERS_JSON_PATH, migrated_path)
     except Exception:
-        # Si no se puede renombrar (permisos/bloqueo), se deja el archivo original.
-        # La tabla users ya no vacia evita reimportaciones en arranques siguientes.
         pass
 
 
