@@ -1,13 +1,10 @@
 import hashlib
 from typing import Any
 
-from werkzeug.security import check_password_hash, generate_password_hash
+from werkzeug.security import check_password_hash
 
+from db import hash_pw
 from repositories.user_repository import UserRepository
-
-
-def hash_pw(pw: str) -> str:
-    return generate_password_hash(pw)
 
 
 def _verify_pw(stored: str, pw: str) -> bool:

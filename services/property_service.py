@@ -9,7 +9,7 @@ from typing import Any
 from repositories.property_repository import PropertyRepository
 
 
-MAX_IMAGES = 60
+MAX_IMAGES = 30  # consistente con scraper_service.MAX_IMAGES
 
 
 class PropertyService:
@@ -132,6 +132,74 @@ class PropertyService:
                 log("No se pudieron descargar imagenes, se mostraran placeholders")
                 saved = [self._placeholder_svg_url()] * 5
         return saved
+
+    def save_from_cache(
+        self,
+        *,
+        source_url: str,
+        owner_username: str,
+        agent_name: str,
+        agent_whatsapp: str,
+        form_url: str,
+        cached: dict[str, Any],
+        log,
+    ) -> int:
+        property_id = self.property_repo.create_property(
+            {
+                "owner_username": owner_username,
+                "source_portal": cached.get("source_portal", "zonaprop"),
+                "titulo": cached["titulo"],
+                "precio": cached["precio"],
+                "ubicacion": cached["ubicacion"],
+                "descripcion": cached["descripcion"],
+                "detalles": cached.get("detalles", {}),
+                "caracteristicas": cached.get("caracteristicas", []),
+                "info_adicional": cached.get("info_adicional", {}),
+                "image_paths": [],
+                "source_image_urls": cached.get("source_image_urls", []),
+                "agent_name": agent_name,
+                "agent_whatsapp": agent_whatsapp,
+                "form_url": form_url,
+                "source_url": source_url,
+            }
+        )
+        log(f"Propiedad guardada en base de datos desde caché (id={property_id})")
+        image_paths = self._copy_images_from_cache(cached["id"], property_id, cached.get("image_paths", []), log)
+        self.property_repo.update_image_paths(property_id, image_paths)
+        return property_id
+
+    def _copy_images_from_cache(
+        self,
+        source_id: int,
+        new_id: int,
+        cached_image_paths: list[str],
+        log,
+    ) -> list[str]:
+        source_dir = os.path.join(self.base_dir, "static", "properties", str(source_id))
+        target_dir = os.path.join(self.base_dir, "static", "properties", str(new_id))
+
+        if not cached_image_paths:
+            return []
+
+        # Si las imágenes no están descargadas localmente (son URLs remotas), las reutilizamos tal cual
+        local_paths = [p for p in cached_image_paths if p.startswith("/static/")]
+        if not local_paths or not os.path.isdir(source_dir):
+            log("Imágenes en caché son remotas, reutilizando URLs originales")
+            return cached_image_paths
+
+        os.makedirs(target_dir, exist_ok=True)
+        new_paths = []
+        for old_path in cached_image_paths:
+            filename = os.path.basename(old_path)
+            src = os.path.join(source_dir, filename)
+            dst = os.path.join(target_dir, filename)
+            if os.path.isfile(src):
+                shutil.copy2(src, dst)
+                new_paths.append(f"/static/properties/{new_id}/{filename}")
+            else:
+                new_paths.append(old_path)
+        log(f"Imágenes copiadas desde caché: {len([p for p in new_paths if p.startswith('/static/')])}")
+        return new_paths
 
     def delete_property(self, property_id: int, owner_username: str | None = None) -> bool:
         deleted = self.property_repo.delete_property(property_id, owner_username=owner_username)
