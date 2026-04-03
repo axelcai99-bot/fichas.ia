@@ -5,31 +5,43 @@ from typing import Any
 from db import get_connection
 
 
-# ── Valid ENUMs ──────────────────────────────────
-VALID_ESTADOS = {
+# ── Valid ENUMs (fuente de verdad) ─────────────────
+VALID_CLIENT_TYPES = {"depto", "ph", "casa", "lote", "oficina", "otro"}
+VALID_CLIENT_ESTADOS = {
     "nuevo_lead", "contactado", "visito_propiedad",
     "negociando", "cerrado", "perdido",
 }
-VALID_ACCIONES = {
-    "", "llamar", "enviar_propiedades", "coordinar_visita", "seguimiento",
+VALID_CLIENT_ACCIONES = {
+    "", "llamar", "enviar_propiedades", "coordinar_visita", "seguimiento", "esperar_respuesta",
+}
+VALID_CLIENT_ZONAS = {
+    "agronomia", "almagro", "balvanera", "barracas", "belgrano", "boedo", "caballito",
+    "chacarita", "coghlan", "colegiales", "constitucion", "flores", "floresta", "la boca",
+    "la paternal", "liniers", "mataderos", "monserrat", "monte castro", "nuñez", "nunez",
+    "palermo", "parque avellaneda", "parque chacabuco", "parque chas", "parque patricios",
+    "puerto madero", "recoleta", "retiro", "saavedra", "san cristobal", "san nicolas",
+    "san telmo", "velez sarsfield", "versalles", "villa crespo", "villa del parque",
+    "villa devoto", "villa general mitre", "villa lugano", "villa luro", "villa ortuzar",
+    "villa pueyrredon", "villa real", "villa riachuelo", "villa santa rita", "villa soldati",
+    "villa urquiza", "olivos", "vicente lopez", "la lucila", "martinez", "san isidro",
+    "acassuso", "beccar", "munro", "florida", "carapachay", "villa adelina",
 }
 
-ESTADO_LABELS = {
-    "nuevo_lead": "Nuevo lead",
-    "contactado": "Contactado",
-    "visito_propiedad": "Visitó propiedad",
-    "negociando": "Negociando",
-    "cerrado": "Cerrado",
-    "perdido": "Perdido",
+LEGACY_ESTADO_MAP = {
+    "new_lead": "nuevo_lead",
+    "contacted": "contactado",
+    "visited_property": "visito_propiedad",
+    "negotiating": "negociando",
+    "closed": "cerrado",
+    "lost": "perdido",
 }
 
-ACCION_LABELS = {
-    "llamar": "Llamar",
-    "enviar_propiedades": "Enviar propiedades",
-    "coordinar_visita": "Coordinar visita",
-    "seguimiento": "Seguimiento",
+LEGACY_ACCION_MAP = {
+    "call": "llamar",
+    "send_properties": "enviar_propiedades",
+    "schedule_visit": "coordinar_visita",
+    "follow_up": "seguimiento",
 }
-
 
 class ClientRepository:
     def list_clients(self, owner_username: str, search: str = "", estado: str = "", limit: int = 50, offset: int = 0) -> dict[str, Any]:
@@ -40,8 +52,12 @@ class ClientRepository:
             q = f"%{search}%"
             params.extend([q, q, q, q])
         if estado:
-            conditions.append("estado = ?")
-            params.append(estado)
+            normalized_estado = LEGACY_ESTADO_MAP.get(estado, estado)
+            legacy_estados = [k for k, v in LEGACY_ESTADO_MAP.items() if v == normalized_estado]
+            estado_values = [normalized_estado] + legacy_estados
+            placeholders = ", ".join("?" for _ in estado_values)
+            conditions.append(f"estado IN ({placeholders})")
+            params.extend(estado_values)
         where = " AND ".join(conditions)
 
         with get_connection() as conn:
@@ -182,6 +198,44 @@ class ClientRepository:
             conn.commit()
             return cur.rowcount > 0
 
+    def empty_trash(self, owner_username: str) -> int:
+        with get_connection() as conn:
+            cur = conn.execute(
+                "DELETE FROM clients WHERE owner_username = ? AND deleted_at IS NOT NULL",
+                (owner_username,),
+            )
+            conn.commit()
+            return cur.rowcount
+
+    def add_activity(self, client_id: int, owner_username: str, tipo: str, texto: str) -> int:
+        now = datetime.now().isoformat()
+        with get_connection() as conn:
+            row = conn.execute(
+                "SELECT id FROM clients WHERE id = ? AND owner_username = ? AND deleted_at IS NULL",
+                (client_id, owner_username),
+            ).fetchone()
+            if not row:
+                return 0
+            cur = conn.execute(
+                "INSERT INTO client_activity_log(client_id, owner_username, tipo, texto, created_at) VALUES (?, ?, ?, ?, ?)",
+                (client_id, owner_username, tipo, texto, now),
+            )
+            conn.commit()
+            return int(cur.lastrowid)
+
+    def list_activities(self, client_id: int, owner_username: str) -> list[dict[str, Any]]:
+        with get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT id, tipo, texto, created_at
+                FROM client_activity_log
+                WHERE client_id = ? AND owner_username = ?
+                ORDER BY created_at DESC LIMIT 50
+                """,
+                (client_id, owner_username),
+            ).fetchall()
+        return [{"id": r["id"], "tipo": r["tipo"], "texto": r["texto"], "created_at": r["created_at"]} for r in rows]
+
     @staticmethod
     def _row_to_dict(row) -> dict[str, Any]:
         # Parse new JSON columns with fallback to legacy comma-separated fields
@@ -218,8 +272,8 @@ class ClientRepository:
             "notas_resumidas": row["notas_resumidas"],
             "situacion": row["situacion"],
             # New CRM fields
-            "estado": row["estado"] if "estado" in row.keys() else "nuevo_lead",
-            "proxima_accion": row["proxima_accion"] if "proxima_accion" in row.keys() else "",
+            "estado": LEGACY_ESTADO_MAP.get(row["estado"], row["estado"]) if "estado" in row.keys() else "nuevo_lead",
+            "proxima_accion": LEGACY_ACCION_MAP.get(row["proxima_accion"], row["proxima_accion"]) if "proxima_accion" in row.keys() else "",
             "proxima_accion_fecha": row["proxima_accion_fecha"] if "proxima_accion_fecha" in row.keys() else "",
             "tipos": tipos,
             "ambientes_min": row["ambientes_min"] if "ambientes_min" in row.keys() else None,
