@@ -9,7 +9,7 @@ El sistema:
 - Extrae fotos en alta resolución
 - Genera fichas con descripción, características, detalles y ubicación
 - Permite gestionar clientes e inmuebles
-- Publica fichas online (opcional, con integración a Netlify)
+
 
 ---
 
@@ -270,7 +270,6 @@ created_at   TIMESTAMP
 ```bash
 SECRET_KEY=tu_clave_secreta_aqui
 FIRECRAWL_API_KEY=opcional_para_scraping_avanzado
-NETLIFY_TOKEN=opcional_para_publicar_online
 ```
 
 ### Dependencias

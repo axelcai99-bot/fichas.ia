@@ -1,4 +1,6 @@
 import os
+import ipaddress
+import socket
 from dotenv import load_dotenv
 load_dotenv()  # Cargar variables de entorno desde .env
 
@@ -31,12 +33,13 @@ from flask import (
 
 from db import init_db
 from repositories.client_repository import ClientRepository
+from repositories.interest_repository import InterestRepository
 from repositories.property_repository import PropertyRepository
 from repositories.user_repository import UserRepository
 from services.auth_service import AuthService
+from services.client_service import sanitize_client_payload
 from services.property_service import PropertyService
 from services.scraper_service import ScraperService
-import config
 
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -59,6 +62,14 @@ app.secret_key = _secret
 init_db()
 
 
+@app.teardown_appcontext
+def _close_db(exc):
+    from flask import g
+    db = g.pop("db", None)
+    if db is not None:
+        db.close()
+
+
 @app.after_request
 def _set_security_headers(response):
     response.headers["X-Content-Type-Options"] = "nosniff"
@@ -69,6 +80,7 @@ def _set_security_headers(response):
 user_repo = UserRepository()
 property_repo = PropertyRepository()
 client_repo = ClientRepository()
+interest_repo = InterestRepository()
 auth_service = AuthService(user_repo)
 scraper_service = ScraperService()
 property_service = PropertyService(property_repo, base_dir=BASE_DIR)
@@ -118,6 +130,7 @@ def _record_login_attempt(key: str):
 JOBS: dict = {}
 _jobs_lock = threading.Lock()
 _JOB_TTL_SECONDS = 600  # 10 min
+_JOB_HARD_TIMEOUT_SECONDS = 180
 
 
 def _cleanup_stale_jobs():
@@ -126,151 +139,130 @@ def _cleanup_stale_jobs():
         stale = [k for k, v in JOBS.items() if now - v.get("created_at", now) > _JOB_TTL_SECONDS]
         for k in stale:
             JOBS.pop(k, None)
-VALID_CLIENT_TYPES = {"depto", "ph", "casa", "lote", "oficina", "otro"}
-VALID_CLIENT_ESTADOS = {
-    "nuevo_lead", "contactado", "visito_propiedad",
-    "negociando", "cerrado", "perdido",
-}
-VALID_CLIENT_ACCIONES = {
-    "", "llamar", "enviar_propiedades", "coordinar_visita", "seguimiento", "esperar_respuesta",
-}
-VALID_CLIENT_ZONAS = {
-    "agronomia", "almagro", "balvanera", "barracas", "belgrano", "boedo", "caballito",
-    "chacarita", "coghlan", "colegiales", "constitucion", "flores", "floresta", "la boca",
-    "la paternal", "liniers", "mataderos", "monserrat", "monte castro", "nuñez", "nunez",
-    "palermo", "parque avellaneda", "parque chacabuco", "parque chas", "parque patricios",
-    "puerto madero", "recoleta", "retiro", "saavedra", "san cristobal", "san nicolas",
-    "san telmo", "velez sarsfield", "versalles", "villa crespo", "villa del parque",
-    "villa devoto", "villa general mitre", "villa lugano", "villa luro", "villa ortuzar",
-    "villa pueyrredon", "villa real", "villa riachuelo", "villa santa rita", "villa soldati",
-    "villa urquiza", "olivos", "vicente lopez", "la lucila", "martinez", "san isidro",
-    "acassuso", "beccar", "munro", "florida", "carapachay", "villa adelina",
-}
-
-def _debug_log(run_id: str, hypothesis_id: str, location: str, message: str, data: dict) -> None:
-    if not os.environ.get("DEBUG_LOG"):
-        return
-    payload = {
-        "runId": run_id,
-        "hypothesisId": hypothesis_id,
-        "location": location,
-        "message": message,
-        "data": data,
-        "timestamp": int(time.time() * 1000),
-    }
-    log_path = os.path.join(BASE_DIR, "debug.log")
-    with open(log_path, "a", encoding="utf-8") as f:
-        f.write(json.dumps(payload, ensure_ascii=False) + "\n")
 
 
 def get_user(username: str):
     return user_repo.get_user(username)
 
 
-def _normalize_presupuesto(value: str) -> str:
-    digits = re.sub(r"\D", "", value or "")
-    if not digits:
+_MAP_LATITUDE_KEYS = ("latitude", "latitud", "lat")
+_MAP_LONGITUDE_KEYS = ("longitude", "longitud", "lng", "lon")
+
+
+def _split_description_parts(description: str) -> list[str]:
+    normalized_description = description or ""
+    parts = [part.strip() for part in re.split(r"\n{2,}", normalized_description) if part.strip()]
+    return parts or [normalized_description]
+
+
+def _parse_coord_from_sources(keys: tuple[str, ...], *sources: dict | None) -> float | None:
+    for source in sources:
+        if not source:
+            continue
+        for key in keys:
+            value = source.get(key)
+            if value in (None, ""):
+                continue
+            try:
+                return float(str(value).strip().replace(",", "."))
+            except (TypeError, ValueError):
+                continue
+    return None
+
+
+def _normalize_map_query(location: str) -> str:
+    value = re.sub(r"\s+", " ", (location or "").strip(" ,"))
+    if not value:
         return ""
-    rev = digits[::-1]
-    chunks = [rev[i:i + 3] for i in range(0, len(rev), 3)]
-    return ".".join(c[::-1] for c in chunks[::-1])
+    value = re.sub(r"\bal\s+(\d{3,5})\b", r" \1", value, flags=re.I)
+    parts = [part.strip(" ,") for part in value.split(",") if part.strip(" ,")]
+    if len(parts) >= 4 and "argentina" in parts[2].lower():
+        parts = [parts[0], parts[3], parts[1], parts[2]]
+    return ", ".join(dict.fromkeys(parts))
 
 
-def _sanitize_client_payload(data: dict) -> tuple[bool, dict | str]:
-    nombre = re.sub(r"\s+", " ", (data.get("nombre") or "").strip())
-    telefono = re.sub(r"\D", "", data.get("telefono") or "")
-    presupuesto = _normalize_presupuesto(data.get("presupuesto") or "")
-    notas_resumidas = (data.get("notas_resumidas") or "").strip()
+def _build_google_embed(query: str, zoom: int = 16) -> str:
+    return (
+        "https://maps.google.com/maps?"
+        f"hl=es&q={urllib.parse.quote(query)}&z={zoom}&ie=UTF8&iwloc=B&output=embed"
+    )
 
-    # ── Level 1: mandatory fields ──
-    if not nombre:
-        return False, "Nombre requerido"
-    if not re.fullmatch(r"[A-Za-zÁÉÍÓÚÜÑáéíóúüñ .'-]{2,80}", nombre):
-        return False, "Nombre solo letras y espacios"
-    if not telefono:
-        return False, "Teléfono requerido"
-    if len(telefono) < 8 or len(telefono) > 15:
-        return False, "Teléfono inválido"
 
-    # ── Pipeline status (enum) ──
-    estado = (data.get("estado") or "nuevo_lead").strip().lower()
-    if estado not in VALID_CLIENT_ESTADOS:
-        estado = "nuevo_lead"
+def _resolve_property_images(prop: dict) -> list[str]:
+    image_paths = prop.get("image_paths") or []
+    source_image_urls = prop.get("source_image_urls") or []
+    images = source_image_urls if source_image_urls and len(image_paths) != len(source_image_urls) else image_paths
+    if not images:
+        images = [PropertyService._placeholder_svg_url()]
+    referer_url = prop.get("source_url", "")
+    return [_build_image_src(image, referer_url) for image in images]
 
-    # ── Next action (enum + optional date) ──
-    proxima_accion = (data.get("proxima_accion") or "").strip().lower()
-    if proxima_accion not in VALID_CLIENT_ACCIONES:
-        proxima_accion = ""
-    proxima_accion_fecha = (data.get("proxima_accion_fecha") or "").strip()
-    proxima_accion_nota = re.sub(r"\s+", " ", (data.get("proxima_accion_nota") or "").strip())[:250]
 
-    # ── Level 2: optional structured fields ──
-    # Property types (array)
-    tipos_raw = data.get("tipos", [])
-    if isinstance(tipos_raw, str):
-        tipos_raw = [t.strip().lower() for t in tipos_raw.split(",") if t.strip()]
-    tipos = [t for t in tipos_raw if t in VALID_CLIENT_TYPES]
+def _build_property_map_context(prop: dict, detalles: dict, info_adicional: dict) -> tuple[str, str, str]:
+    latitude = _parse_coord_from_sources(_MAP_LATITUDE_KEYS, prop, detalles, info_adicional)
+    longitude = _parse_coord_from_sources(_MAP_LONGITUDE_KEYS, prop, detalles, info_adicional)
+    map_location_label = (prop.get("ubicacion") or "").strip()
+    map_embed_url = ""
+    maps_url = ""
 
-    # Rooms (min/max)
-    ambientes_min = data.get("ambientes_min")
-    ambientes_max = data.get("ambientes_max")
-    if ambientes_min is not None:
+    if latitude is not None and longitude is not None:
+        coords_query = f"{latitude},{longitude}"
+        maps_url = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(coords_query)}"
+        map_embed_url = _build_google_embed(coords_query)
+        if not map_location_label:
+            map_location_label = coords_query
+        return map_embed_url, maps_url, map_location_label
+
+    map_query = _normalize_map_query(map_location_label)
+    if map_query and map_query.lower() != "ver en el portal":
+        maps_url = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(map_query)}"
+        map_embed_url = _build_google_embed(map_query)
+
+    return map_embed_url, maps_url, map_location_label
+
+
+def _is_private_hostname(hostname: str) -> bool:
+    host = (hostname or "").strip().strip(".")
+    if not host:
+        return True
+    lowered = host.lower()
+    blocked_hosts = {"localhost", "127.0.0.1", "0.0.0.0", "::1"}
+    if lowered in blocked_hosts or lowered.endswith(".local"):
+        return True
+    try:
+        ip = ipaddress.ip_address(host)
+        return (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_unspecified
+            or ip.is_reserved
+            or ip.is_multicast
+        )
+    except ValueError:
+        pass
+
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except socket.gaierror:
+        return True
+
+    for info in infos:
+        candidate = info[4][0]
         try:
-            ambientes_min = max(1, min(10, int(ambientes_min)))
-        except (ValueError, TypeError):
-            ambientes_min = None
-    if ambientes_max is not None:
-        try:
-            ambientes_max = max(1, min(10, int(ambientes_max)))
-        except (ValueError, TypeError):
-            ambientes_max = None
-    if ambientes_min and ambientes_max and ambientes_min > ambientes_max:
-        ambientes_min, ambientes_max = ambientes_max, ambientes_min
-    apto_credito_raw = data.get("apto_credito")
-    if isinstance(apto_credito_raw, bool):
-        apto_credito_value = "si" if apto_credito_raw else "no"
-    else:
-        apto_credito_value = str(apto_credito_raw or "").strip().lower()
-    if apto_credito_value not in {"si", "no", "indiferente"}:
-        apto_credito_value = "indiferente"
-
-
-    # Zones (array)
-    zonas_raw = data.get("zonas", [])
-    if isinstance(zonas_raw, str):
-        zonas_raw = [z.strip().lower() for z in zonas_raw.split(",") if z.strip()]
-    zonas = [z for z in zonas_raw if z in VALID_CLIENT_ZONAS]
-
-    # Legacy compat fields (kept for backward compatibility)
-    tipo_legacy = ", ".join(dict.fromkeys(tipos)) if tipos else ""
-    zonas_legacy = ", ".join(zonas) if zonas else ""
-    ambientes_legacy = ""
-    if ambientes_min and ambientes_max:
-        ambientes_legacy = f"{ambientes_min}-{ambientes_max}"
-    elif ambientes_min:
-        ambientes_legacy = str(ambientes_min)
-
-    return True, {
-        "nombre": nombre,
-        "telefono": telefono,
-        "presupuesto": presupuesto,
-        "tipo": tipo_legacy,
-        "ambientes": ambientes_legacy,
-        "apto_credito": apto_credito_value == "si",
-        "apto_credito_estado": apto_credito_value,
-        "zonas_busqueda": zonas_legacy,
-        "notas_resumidas": notas_resumidas,
-        "situacion": estado,  # legacy column
-        # New structured fields
-        "estado": estado,
-        "proxima_accion": proxima_accion,
-        "proxima_accion_fecha": proxima_accion_fecha,
-        "proxima_accion_nota": proxima_accion_nota,
-        "tipos": tipos,
-        "ambientes_min": ambientes_min,
-        "ambientes_max": ambientes_max,
-        "zonas": zonas,
-    }
+            ip = ipaddress.ip_address(candidate)
+        except ValueError:
+            return True
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_unspecified
+            or ip.is_reserved
+            or ip.is_multicast
+        ):
+            return True
+    return False
 
 
 def _format_error_message(err: Exception) -> str:
@@ -463,25 +455,10 @@ def delete_usuario():
 @login_required
 @csrf_protect
 def generar():
-    run_id = f"run-{int(time.time() * 1000)}"
     username = session["username"]
     user = get_user(username)
     data = request.json or {}
     url_prop = data.get("url", "").strip()
-    # region agent log
-    _debug_log(
-        run_id=run_id,
-        hypothesis_id="H6",
-        location="app.py:generar",
-        message="API generar called",
-        data={
-            "username": username,
-            "has_url": bool(url_prop),
-            "base_dir": BASE_DIR,
-            "cwd": os.getcwd(),
-        },
-    )
-    # endregion
     if not url_prop:
         return jsonify({"error": "Falta el link"}), 400
 
@@ -504,7 +481,7 @@ def generar():
 
     threading.Thread(
         target=_run_generation,
-        args=(job_id, url_prop, nombre, whatsapp, form_url, run_id),
+        args=(job_id, url_prop, nombre, whatsapp, form_url),
         daemon=True,
     ).start()
     return jsonify({"job_id": job_id})
@@ -551,27 +528,10 @@ def property_detail(property_id: int):
     if not prop:
         abort(404)
 
-    image_paths = prop.get("image_paths") or []
-    source_image_urls = prop.get("source_image_urls") or []
-
-    # Si sólo hay 1 imagen local (descarga probablemente fallida) y tenemos
-    # URLs originales del scraping, usamos esas como fallback directo.
-    if source_image_urls and len(image_paths) != len(source_image_urls):
-        images = source_image_urls
-    elif image_paths:
-        images = image_paths
-    else:
-        images = []
-
-    if not images:
-        placeholder = PropertyService._placeholder_svg_url()
-        images = [placeholder]
-    images = [_build_image_src(image, prop.get("source_url", "")) for image in images]
+    images = _resolve_property_images(prop)
 
     descripcion = prop.get("descripcion", "") or ""
-    # Dividir por párrafos (doble salto de línea) para respetar la estructura original.
-    # Los saltos simples dentro de un párrafo se preservan con white-space:pre-line en el CSS.
-    descripcion_parts = [p.strip() for p in re.split(r"\n{2,}", descripcion) if p.strip()] or [descripcion]
+    descripcion_parts = _split_description_parts(descripcion)
     wa_msg = urllib.parse.quote(
         f"Hola {prop.get('agent_name', '')}, te contacto por la propiedad: {prop.get('titulo', '')} - {prop.get('ubicacion', '')}"
     )
@@ -583,74 +543,9 @@ def property_detail(property_id: int):
 
     detalles = prop.get("detalles", {}) or {}
     info_adicional = prop.get("info_adicional", {}) or {}
+    map_embed_url, maps_url, map_location_label = _build_property_map_context(prop, detalles, info_adicional)
 
-    def _parse_coord(*values):
-        for value in values:
-            if value in (None, ""):
-                continue
-            try:
-                normalized = str(value).strip().replace(",", ".")
-                return float(normalized)
-            except (TypeError, ValueError):
-                continue
-        return None
-
-    def _normalize_map_query(location: str) -> str:
-        value = re.sub(r"\s+", " ", (location or "").strip(" ,"))
-        if not value:
-            return ""
-        value = re.sub(r"\bal\s+(\d{3,5})\b", r" \1", value, flags=re.I)
-        parts = [part.strip(" ,") for part in value.split(",") if part.strip(" ,")]
-        if len(parts) >= 4 and "argentina" in parts[2].lower():
-            # Reordenar barrio antes de ciudad/país mejora la geocodificación.
-            parts = [parts[0], parts[3], parts[1], parts[2]]
-        return ", ".join(dict.fromkeys(parts))
-
-    def _build_google_embed(query, zoom=16):
-        return (
-            "https://maps.google.com/maps?"
-            f"hl=es&q={urllib.parse.quote(query)}&z={zoom}&ie=UTF8&iwloc=B&output=embed"
-        )
-
-    latitude = _parse_coord(
-        prop.get("latitude"),
-        prop.get("latitud"),
-        detalles.get("latitude"),
-        detalles.get("latitud"),
-        detalles.get("lat"),
-        info_adicional.get("latitude"),
-        info_adicional.get("latitud"),
-        info_adicional.get("lat"),
-    )
-    longitude = _parse_coord(
-        prop.get("longitude"),
-        prop.get("longitud"),
-        detalles.get("longitude"),
-        detalles.get("longitud"),
-        detalles.get("lng"),
-        detalles.get("lon"),
-        info_adicional.get("longitude"),
-        info_adicional.get("longitud"),
-        info_adicional.get("lng"),
-        info_adicional.get("lon"),
-    )
-
-    map_embed_url = ""
-    maps_url = ""
-    map_location_label = (prop.get("ubicacion") or "").strip()
-    map_query = _normalize_map_query(map_location_label)
-    if latitude is not None and longitude is not None:
-        coords_query = f"{latitude},{longitude}"
-        maps_url = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(coords_query)}"
-        # Cuando hay coordenadas, usar solo lat/lng evita que Google convierta
-        # la consulta en una búsqueda ambigua y omita el pin exacto.
-        map_embed_url = _build_google_embed(coords_query)
-        if not map_location_label:
-            map_location_label = coords_query
-    elif map_query and map_query.lower() != "ver en el portal":
-        maps_url = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(map_query)}"
-        map_embed_url = _build_google_embed(map_query)
-
+    is_owner = session.get("username") == prop.get("owner_username")
     return render_template(
         "property_detail.html",
         prop=prop,
@@ -664,6 +559,7 @@ def property_detail(property_id: int):
         maps_url=maps_url,
         map_location_label=map_location_label,
         inicial=(prop.get("agent_name") or "A")[0].upper(),
+        is_owner=is_owner,
     )
 
 
@@ -674,7 +570,7 @@ def proxy_image():
     if not re.match(r"^https?://", image_url, re.I):
         abort(400)
     parsed = urllib.parse.urlparse(image_url)
-    if not parsed.hostname or parsed.hostname in ("localhost", "127.0.0.1", "0.0.0.0") or parsed.hostname.startswith("192.168.") or parsed.hostname.startswith("10.") or parsed.hostname.endswith(".local"):
+    if not parsed.hostname or _is_private_hostname(parsed.hostname):
         abort(400)
     referer_url = re.sub(r"[\r\n]", "", referer_url)
 
@@ -706,11 +602,28 @@ def properties_list():
     username = session["username"]
     page = max(1, int(request.args.get("page") or 1))
     per_page = min(100, max(1, int(request.args.get("per_page") or 20)))
+    search = (request.args.get("q") or "").strip()
+    portal = (request.args.get("portal") or "").strip()
     result = property_repo.list_properties(
         limit=per_page, offset=(page - 1) * per_page,
         owner_username=username,
+        source_portal=portal or None,
+        search=search,
     )
     return jsonify(result)
+
+
+@app.route("/api/propiedades/<int:property_id>/tags", methods=["PUT"])
+@login_required
+@csrf_protect
+def update_property_tags(property_id: int):
+    username = session["username"]
+    data = request.json or {}
+    tags = [str(t).strip()[:50] for t in (data.get("tags") or []) if str(t).strip()][:10]
+    ok = property_repo.update_tags(property_id, username, tags)
+    if not ok:
+        return jsonify({"error": "Propiedad no encontrada"}), 404
+    return jsonify({"ok": True})
 
 
 @app.route("/api/propiedades/<int:property_id>", methods=["DELETE"])
@@ -767,18 +680,15 @@ def permanent_delete_property(property_id: int):
 @csrf_protect
 def empty_trash_properties():
     username = session["username"]
-    from db import get_connection
     try:
-        with get_connection() as conn:
-            conn.execute("DELETE FROM properties WHERE owner_username = ? AND deleted_at IS NOT NULL", (username,))
-            # Si no quedan propiedades en la tabla, resetear el autoincrement
-            row = conn.execute("SELECT COUNT(*) FROM properties").fetchone()
-            if row[0] == 0:
-                conn.execute("DELETE FROM sqlite_sequence WHERE name='properties'")
-            conn.commit()
+        deleted_properties = property_repo.list_deleted_properties(owner_username=username)
+        deleted_count = 0
+        for prop in deleted_properties:
+            if property_service.delete_property(prop["id"], owner_username=username):
+                deleted_count += 1
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-    return jsonify({"ok": True})
+    return jsonify({"ok": True, "deleted_count": deleted_count})
 
 
 @app.route("/api/clientes", methods=["GET"])
@@ -799,7 +709,7 @@ def list_clients():
 def create_client():
     username = session["username"]
     data = request.json or {}
-    ok, payload_or_msg = _sanitize_client_payload(data)
+    ok, payload_or_msg = sanitize_client_payload(data)
     if not ok:
         return jsonify({"error": payload_or_msg}), 400
     client_id = client_repo.create_client(owner_username=username, payload=payload_or_msg)
@@ -812,7 +722,7 @@ def create_client():
 def update_client(client_id: int):
     username = session["username"]
     data = request.json or {}
-    ok, payload_or_msg = _sanitize_client_payload(data)
+    ok, payload_or_msg = sanitize_client_payload(data)
     if not ok:
         return jsonify({"error": payload_or_msg}), 400
     ok = client_repo.update_client(client_id=client_id, owner_username=username, payload=payload_or_msg)
@@ -861,18 +771,37 @@ def permanent_delete_client(client_id: int):
     return jsonify({"ok": True})
 
 
+@app.route("/api/clientes/<int:client_id>/actividad", methods=["GET"])
+@login_required
+def list_client_activity(client_id: int):
+    username = session["username"]
+    return jsonify(client_repo.list_activities(client_id, username))
+
+
+@app.route("/api/clientes/<int:client_id>/actividad", methods=["POST"])
+@login_required
+@csrf_protect
+def add_client_activity(client_id: int):
+    username = session["username"]
+    data = request.json or {}
+    tipo = (data.get("tipo") or "nota").strip()
+    texto = (data.get("texto") or "").strip()[:1000]
+    if tipo not in {"nota", "llamada", "visita", "whatsapp"}:
+        tipo = "nota"
+    if not texto:
+        return jsonify({"error": "Texto requerido"}), 400
+    activity_id = client_repo.add_activity(client_id, username, tipo, texto)
+    if not activity_id:
+        return jsonify({"error": "Cliente no encontrado"}), 404
+    return jsonify({"ok": True, "id": activity_id})
+
+
 @app.route("/api/clientes/papelera/vaciar", methods=["DELETE"])
 @login_required
 @csrf_protect
 def empty_trash_clients():
     username = session["username"]
-    from db import get_connection
-    try:
-        with get_connection() as conn:
-            conn.execute("DELETE FROM clients WHERE owner_username = ? AND deleted_at IS NOT NULL", (username,))
-            conn.commit()
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    client_repo.empty_trash(username)
     return jsonify({"ok": True})
 
 
@@ -883,22 +812,17 @@ def empty_trash_clients():
 def add_interest():
     username = session["username"]
     data = request.json or {}
-    client_id = data.get("client_id")
-    property_id = data.get("property_id")
+    try:
+        client_id = int(data.get("client_id"))
+        property_id = int(data.get("property_id"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "IDs inválidos"}), 400
     nota = (data.get("nota") or "").strip()[:500]
     if not client_id or not property_id:
         return jsonify({"error": "Faltan client_id o property_id"}), 400
-    from db import get_connection
-    now = datetime.now().isoformat()
-    try:
-        with get_connection() as conn:
-            conn.execute(
-                "INSERT OR IGNORE INTO client_property_interests (client_id, property_id, owner_username, nota, created_at) VALUES (?, ?, ?, ?, ?)",
-                (client_id, property_id, username, nota, now),
-            )
-            conn.commit()
-    except Exception:
-        return jsonify({"error": "Error al vincular"}), 500
+    ok = interest_repo.add(client_id, property_id, username, nota)
+    if not ok:
+        return jsonify({"error": "Cliente o propiedad no encontrados"}), 404
     return jsonify({"ok": True})
 
 
@@ -907,93 +831,25 @@ def add_interest():
 @csrf_protect
 def remove_interest():
     data = request.json or {}
-    client_id = data.get("client_id")
-    property_id = data.get("property_id")
-    username = session["username"]
-    from db import get_connection
-    with get_connection() as conn:
-        conn.execute(
-            "DELETE FROM client_property_interests WHERE client_id = ? AND property_id = ? AND owner_username = ?",
-            (client_id, property_id, username),
-        )
-        conn.commit()
+    try:
+        client_id = int(data.get("client_id"))
+        property_id = int(data.get("property_id"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "IDs inválidos"}), 400
+    interest_repo.remove(client_id, property_id, session["username"])
     return jsonify({"ok": True})
 
 
 @app.route("/api/intereses/cliente/<int:client_id>")
 @login_required
 def interests_by_client(client_id: int):
-    username = session["username"]
-    from db import get_connection
-    with get_connection() as conn:
-        rows = conn.execute(
-            """
-            SELECT cpi.id, cpi.property_id, cpi.nota, cpi.created_at,
-                   p.titulo, p.precio, p.ubicacion
-            FROM client_property_interests cpi
-            JOIN properties p ON p.id = cpi.property_id
-            WHERE cpi.client_id = ? AND cpi.owner_username = ?
-            ORDER BY cpi.created_at DESC
-            """,
-            (client_id, username),
-        ).fetchall()
-    return jsonify([
-        {"id": r["id"], "property_id": r["property_id"], "nota": r["nota"],
-         "created_at": r["created_at"], "titulo": r["titulo"],
-         "precio": r["precio"], "ubicacion": r["ubicacion"]}
-        for r in rows
-    ])
+    return jsonify(interest_repo.by_client(client_id, session["username"]))
 
 
 @app.route("/api/intereses/propiedad/<int:property_id>")
 @login_required
 def interests_by_property(property_id: int):
-    username = session["username"]
-    from db import get_connection
-    with get_connection() as conn:
-        rows = conn.execute(
-            """
-            SELECT cpi.id, cpi.client_id, cpi.nota, cpi.created_at,
-                   c.nombre, c.telefono
-            FROM client_property_interests cpi
-            JOIN clients c ON c.id = cpi.client_id
-            WHERE cpi.property_id = ? AND cpi.owner_username = ?
-            ORDER BY cpi.created_at DESC
-            """,
-            (property_id, username),
-        ).fetchall()
-    return jsonify([
-        {"id": r["id"], "client_id": r["client_id"], "nota": r["nota"],
-         "created_at": r["created_at"], "nombre": r["nombre"],
-         "telefono": r["telefono"]}
-        for r in rows
-    ])
-
-
-def _is_detail_feature(feature: str) -> bool:
-    """Return True if this feature string came from the structured detalles dict."""
-    low = feature.lower()
-    return bool(
-        re.search(r"m²\s*(tot|cub)", low)
-        or re.search(r"\b(amb|dorm)\.", low)
-        or re.search(r"\bbaños\b", low)
-    )
-
-
-def _merge_features(caracteristicas: list[str], detalles: dict) -> list[str]:
-    merged: list[str] = []
-    seen: set[str] = set()
-
-    for item in _ordered_detail_features(detalles):
-        _append_feature(merged, seen, item)
-
-    for feature in (caracteristicas or []):
-        cleaned = _clean_feature_label(feature)
-        if not cleaned or _feature_duplicates_details(cleaned, detalles):
-            continue
-        _append_feature(merged, seen, cleaned)
-
-    return merged
+    return jsonify(interest_repo.by_property(property_id, session["username"]))
 
 
 def _build_image_src(image: str, referer_url: str) -> str:
@@ -1004,146 +860,72 @@ def _build_image_src(image: str, referer_url: str) -> str:
     return f"/proxy-image?{query}"
 
 
-def _ordered_detail_features(detalles: dict) -> list[str]:
-    ordered: list[str] = []
-    mappings = [
-        ("metros_totales", lambda value: f"{value} m\u00b2 tot."),
-        ("metros_cubiertos", lambda value: f"{value} m\u00b2 cub."),
-        ("ambientes", lambda value: f"{value} amb."),
-        ("banos", lambda value: f"{value} ba\u00f1os"),
-        ("dormitorios", lambda value: f"{value} dorm."),
-        ("estado", lambda value: value),
-        ("disposicion", lambda value: value),
-    ]
-    for key, formatter in mappings:
-        raw_value = _repair_text((detalles.get(key) or "").strip())
-        if not raw_value:
-            continue
-        ordered.append(formatter(raw_value))
-    return ordered
-
-
-def _append_feature(target: list[str], seen: set[str], value: str) -> None:
-    normalized = _repair_text(value).strip()
-    if not normalized:
-        return
-    key = normalized.lower()
-    if key in seen:
-        return
-    seen.add(key)
-    target.append(normalized)
-
-
-def _clean_feature_label(value: str) -> str:
-    cleaned = _repair_text(re.sub(r"\s+", " ", (value or "")).replace("\\|", " ")).strip(" -|:.,")
-    if len(cleaned) < 2:
-        return ""
-
-    normalized = cleaned.lower()
-    if normalized in {
-        "amb", "amb.", "ambiente", "ambientes",
-        "dorm", "dorm.", "dormitorio", "dormitorios",
-        "ba\u00f1o", "ba\u00f1os", "bano", "banos",
-        "m\u00b2 tot", "m\u00b2 cub", "m2 tot", "m2 cub",
-    }:
-        return ""
-    if re.fullmatch(r"\d+(?:[.,]\d+)?", normalized):
-        return ""
-    if re.search(r"\b(publicado|actualizado|favorito|compartir|notas personales|ver datos)\b", normalized):
-        return ""
-    if re.search(r"\bdepartamento\b", normalized) and re.search(r"\bamb", normalized):
-        return ""
-    if re.search(r"\b(?:av|avenida|calle|pasaje|pje|ruta|boulevard|blvd|bv)\b", normalized) and re.search(r"\d{3,5}", normalized):
-        return ""
-    if re.search(r"\b(?:capital federal|san crist[oó]bal)\b", normalized):
-        return ""
-    if re.search(r"\b\d+\s+o\s+m[aá]s\s+ambientes?\b", normalized):
-        return ""
-
-    return cleaned
-
-
-def _feature_duplicates_details(value: str, detalles: dict) -> bool:
-    normalized = _repair_text(value).lower()
-    detail_patterns = [
-        ("metros_totales", f"\\b{re.escape(str(detalles.get('metros_totales') or '').strip())}\\s*m(?:²|2).*(?:tot|total)"),
-        ("metros_cubiertos", f"\\b{re.escape(str(detalles.get('metros_cubiertos') or '').strip())}\\s*m(?:²|2).*(?:cub|cubierta)"),
-        ("ambientes", f"\\b{re.escape(str(detalles.get('ambientes') or '').strip())}\\s*(?:amb|ambientes?)"),
-        ("banos", f"\\b{re.escape(str(detalles.get('banos') or '').strip())}\\s*(?:bañ|ban)"),
-        ("dormitorios", f"\\b{re.escape(str(detalles.get('dormitorios') or '').strip())}\\s*dorm"),
-    ]
-    for key, pattern in detail_patterns:
-        if detalles.get(key) and re.search(pattern, normalized):
-            return True
-
-    for key in ("estado", "disposicion"):
-        detail_value = _repair_text((detalles.get(key) or "").strip()).lower()
-        if detail_value and detail_value == normalized:
-            return True
-
-    return False
-
-
-def _repair_text(value: str) -> str:
-    text = value or ""
-    if any(token in text for token in ("\u00c3", "\u00c2")):
-        try:
-            repaired = text.encode("latin1").decode("utf-8")
-            if repaired:
-                text = repaired
-        except Exception:
-            pass
-    return text
-
-
-def _run_generation(job_id, source_url, agent_name, agent_whatsapp, form_url, run_id: str | None = None):
+def _run_generation(job_id, source_url, agent_name, agent_whatsapp, form_url):
     with _jobs_lock:
         job = JOBS[job_id]
     q = job["queue"]
-    run_id = run_id or f"run-{int(time.time() * 1000)}"
+    started_at = time.time()
 
     def log(msg: str):
         q.put(msg)
 
+    def ensure_not_timed_out(stage: str) -> None:
+        if time.time() - started_at > _JOB_HARD_TIMEOUT_SECONDS:
+            raise TimeoutError(
+                f"El proceso superó el límite de {_JOB_HARD_TIMEOUT_SECONDS} segundos durante {stage}."
+            )
+
     try:
-        # region agent log
-        _debug_log(
-            run_id=run_id,
-            hypothesis_id="H7",
-            location="app.py:_run_generation:start",
-            message="Background generation started",
-            data={"job_id": job_id, "source_url_prefix": (source_url or "")[:120]},
-        )
-        # endregion
-        scraped = scraper_service.scrape_property(source_url, log)
-        property_id = property_service.save_scraped_property(
-            source_url=source_url,
-            owner_username=job.get("user", "admin"),
-            agent_name=agent_name or "Asesor",
-            agent_whatsapp=agent_whatsapp or "",
-            form_url=form_url or "",
-            scraped=scraped,
-            log=log,
-        )
-        job["result_url"] = f"/propiedad/{property_id}"
+        cached = property_service.property_repo.find_by_source_url(source_url)
+        if cached:
+            log("Esta URL ya fue procesada anteriormente. Usando datos en caché (sin re-scrapear)...")
+            property_id = property_service.save_from_cache(
+                source_url=source_url,
+                owner_username=job.get("user", "admin"),
+                agent_name=agent_name or "Asesor",
+                agent_whatsapp=agent_whatsapp or "",
+                form_url=form_url or "",
+                cached=cached,
+                log=log,
+            )
+        else:
+            log("Iniciando scraping de la publicación...")
+            ensure_not_timed_out("inicio")
+            scraped = scraper_service.scrape_property(source_url, log)
+            ensure_not_timed_out("scraping")
+            log("Scraping listo. Guardando propiedad e imágenes...")
+            property_id = property_service.save_scraped_property(
+                source_url=source_url,
+                owner_username=job.get("user", "admin"),
+                agent_name=agent_name or "Asesor",
+                agent_whatsapp=agent_whatsapp or "",
+                form_url=form_url or "",
+                scraped=scraped,
+                log=log,
+            )
+        ensure_not_timed_out("guardado")
+        prop_data = property_repo.get_property(property_id)
+        token = prop_data.get("public_token") if prop_data else None
+        job["result_url"] = f"/p/{token}" if token else f"/propiedad/{property_id}"
         job["status"] = "done"
         log("Proceso completado")
         q.put("__DONE__")
     except Exception as e:
-        # region agent log
-        _debug_log(
-            run_id=run_id,
-            hypothesis_id="H7",
-            location="app.py:_run_generation:except",
-            message="Background generation exception",
-            data={"error_type": type(e).__name__, "error": str(e)[:300]},
-        )
-        # endregion
         friendly_error = _format_error_message(e)
         log(f"Error: {friendly_error}")
         job["status"] = "error"
         job["error_message"] = friendly_error
         q.put("__ERROR__")
+
+
+
+@app.route("/p/<token>")
+def public_property(token: str):
+    prop = property_repo.find_by_token(token)
+    if not prop:
+        abort(404)
+    return redirect(url_for("property_detail", property_id=prop["id"]))
+
 
 
 if __name__ == "__main__":

@@ -19,10 +19,11 @@ fichas-ia/
 │   ├── __init__.py
 │   └── db.py                    → Gestión de SQLite
 │
-├── 📁 repositorios/             ← Acceso a datos
+├── 📁 repositories/             ← Acceso a datos
 │   ├── user_repository.py       → CRUD usuarios
 │   ├── property_repository.py   → CRUD propiedades
-│   └── client_repository.py     → CRUD clientes
+│   ├── client_repository.py     → CRUD clientes
+│   └── interest_repository.py   → Relaciones cliente-propiedad
 │
 ├── 📁 servicios/                ← Lógica de negocio
 │   ├── auth_service.py          → Autenticación

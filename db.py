@@ -10,6 +10,16 @@ USERS_JSON_PATH = os.path.join(BASE_DIR, "users.json")
 
 
 def get_connection() -> sqlite3.Connection:
+    """Devuelve una conexión SQLite. Dentro de un request Flask, reutiliza la misma."""
+    try:
+        from flask import g, has_app_context
+        if has_app_context():
+            if "db" not in g:
+                g.db = sqlite3.connect(DB_PATH, check_same_thread=False)
+                g.db.row_factory = sqlite3.Row
+            return g.db
+    except ImportError:
+        pass
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
@@ -113,7 +123,7 @@ def init_db() -> None:
 
         _ensure_column(conn, "properties", "deleted_at", "TEXT")
         _ensure_column(conn, "clients", "deleted_at", "TEXT")
-        _ensure_column(conn, "clients", "estado", "TEXT NOT NULL DEFAULT 'new_lead'")
+        _ensure_column(conn, "clients", "estado", "TEXT NOT NULL DEFAULT 'nuevo_lead'")
         _ensure_column(conn, "clients", "proxima_accion", "TEXT NOT NULL DEFAULT ''")
         _ensure_column(conn, "clients", "proxima_accion_fecha", "TEXT NOT NULL DEFAULT ''")
         _ensure_column(conn, "clients", "proxima_accion_nota", "TEXT NOT NULL DEFAULT ''")
@@ -123,6 +133,9 @@ def init_db() -> None:
         _ensure_column(conn, "clients", "ambientes_max", "INTEGER")
         _ensure_column(conn, "clients", "zonas_json", "TEXT NOT NULL DEFAULT '[]'")
         _migrate_clients_crm_enums(conn)
+        _ensure_column(conn, "properties", "tags_json", "TEXT NOT NULL DEFAULT '[]'")
+        _ensure_column(conn, "properties", "public_token", "TEXT")
+        _migrate_public_tokens(conn)
 
         conn.execute(
             """
@@ -147,6 +160,24 @@ def init_db() -> None:
             """
             CREATE INDEX IF NOT EXISTS idx_cpi_property
             ON client_property_interests(property_id)
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS client_activity_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                client_id INTEGER NOT NULL,
+                owner_username TEXT NOT NULL,
+                tipo TEXT NOT NULL DEFAULT 'nota',
+                texto TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_cal_client
+            ON client_activity_log(client_id)
             """
         )
         conn.commit()
@@ -224,6 +255,16 @@ def _mark_users_json_migrated() -> None:
         pass
 
 
+def _migrate_public_tokens(conn: sqlite3.Connection) -> None:
+    rows = conn.execute("SELECT id FROM properties WHERE public_token IS NULL").fetchall()
+    if not rows:
+        return
+    conn.executemany(
+        "UPDATE properties SET public_token = ? WHERE id = ?",
+        [(os.urandom(16).hex(), r["id"]) for r in rows],
+    )
+
+
 def _ensure_column(conn: sqlite3.Connection, table: str, column: str, col_type: str) -> None:
     cols = conn.execute(f"PRAGMA table_info({table})").fetchall()
     if column not in {c["name"] for c in cols}:
@@ -255,22 +296,29 @@ def _ensure_properties_source_image_urls_column(conn: sqlite3.Connection) -> Non
 
 def _migrate_clients_crm_enums(conn: sqlite3.Connection) -> None:
     estado_map = {
-        "nuevo_lead": "new_lead",
-        "contactado": "contacted",
-        "visito_propiedad": "visited_property",
-        "negociando": "negotiating",
-        "cerrado": "closed",
-        "perdido": "lost",
+        "new_lead": "nuevo_lead",
+        "contacted": "contactado",
+        "visited_property": "visito_propiedad",
+        "negotiating": "negociando",
+        "closed": "cerrado",
+        "lost": "perdido",
     }
+    old_estados = tuple(estado_map.keys())
+    needs_migration = conn.execute(
+        f"SELECT 1 FROM clients WHERE estado IN ({','.join('?' * len(old_estados))}) LIMIT 1",
+        old_estados,
+    ).fetchone()
+    if not needs_migration:
+        return
     for old, new in estado_map.items():
         conn.execute("UPDATE clients SET estado = ? WHERE estado = ?", (new, old))
         conn.execute("UPDATE clients SET situacion = ? WHERE situacion = ?", (new, old))
 
     accion_map = {
-        "llamar": "call",
-        "enviar_propiedades": "send_properties",
-        "coordinar_visita": "schedule_visit",
-        "seguimiento": "follow_up",
+        "call": "llamar",
+        "send_properties": "enviar_propiedades",
+        "schedule_visit": "coordinar_visita",
+        "follow_up": "seguimiento",
     }
     for old, new in accion_map.items():
         conn.execute("UPDATE clients SET proxima_accion = ? WHERE proxima_accion = ?", (new, old))
