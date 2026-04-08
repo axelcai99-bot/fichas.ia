@@ -191,9 +191,16 @@ def _build_google_embed(query: str, zoom: int = 16) -> str:
 def _resolve_property_images(prop: dict) -> list[str]:
     image_paths = prop.get("image_paths") or []
     source_image_urls = prop.get("source_image_urls") or []
-    images = source_image_urls if source_image_urls and len(image_paths) != len(source_image_urls) else image_paths
-    if not images:
+
+    # Preferir URLs originales del portal (sobreviven redeploys).
+    # Solo usar archivos locales si no hay URLs originales.
+    if source_image_urls:
+        images = source_image_urls
+    elif image_paths:
+        images = image_paths
+    else:
         images = [PropertyService._placeholder_svg_url()]
+
     referer_url = prop.get("source_url", "")
     return [_build_image_src(image, referer_url) for image in images]
 
