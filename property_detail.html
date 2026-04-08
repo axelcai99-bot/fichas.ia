@@ -1,20 +1,42 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{{ prop.titulo }}</title>
+
+<!-- Open Graph (preview en WhatsApp, Instagram, etc.) -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="{{ prop.titulo or 'Propiedad' }}">
+<meta property="og:description" content="{{ prop.ubicacion or '' }}{% if prop.precio %} — {{ prop.precio }}{% endif %}">
+{% if images and images|length > 0 %}
+<meta property="og:image" content="{{ images[0] }}">
+{% endif %}
+<meta property="og:site_name" content="{{ prop.agent_name or 'Ficha Inmobiliaria' }}">
+
+<!-- Twitter Card -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{{ prop.titulo or 'Propiedad' }}">
+<meta name="twitter:description" content="{{ prop.ubicacion or '' }}{% if prop.precio %} — {{ prop.precio }}{% endif %}">
+{% if images and images|length > 0 %}
+<meta name="twitter:image" content="{{ images[0] }}">
+{% endif %}
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Inter',sans-serif;background:#f5f5f5;color:#404041;-webkit-font-smoothing:antialiased}
-.ct{max-width:1000px;margin:0 auto;padding:24px 16px}
-.card{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+body{font-family:'Inter',sans-serif;background:radial-gradient(circle at top left,rgba(0,61,165,.10),transparent 30%),radial-gradient(circle at top right,rgba(220,28,46,.08),transparent 24%),#f5f7fb;color:#404041;-webkit-font-smoothing:antialiased}
+.brand-header{position:sticky;top:0;z-index:40;backdrop-filter:blur(16px);background:rgba(245,247,251,.88);border-bottom:1px solid rgba(15,23,42,.08)}
+.brand-inner{max-width:1080px;margin:0 auto;padding:14px 16px;display:flex;align-items:center;justify-content:flex-start}
+.brand-lockup{display:flex;align-items:center;gap:12px}
+.brand-mark{width:40px;height:40px;border-radius:14px;background:linear-gradient(135deg,#003DA5,#DC1C2E);display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px;font-weight:800;box-shadow:0 10px 24px rgba(0,61,165,.18)}
+.brand-name{font-size:24px;font-weight:800;letter-spacing:-.03em;color:#18233a}
+.brand-sub{font-size:11px;color:#7a8497;text-transform:uppercase;letter-spacing:.18em}
+.ct{max-width:1080px;margin:0 auto;padding:24px 16px 36px}
+.card{background:rgba(255,255,255,.94);border:1px solid rgba(15,23,42,.07);border-radius:18px;padding:24px;box-shadow:0 10px 30px rgba(15,23,42,.05)}
 .gp{background:linear-gradient(135deg,#003DA5,#DC1C2E);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-
-/* ── Gallery Grid ─────────────────────────────── */
+.section-label{font-size:11px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:#8b95a8;margin-bottom:14px}
 .gallery-wrap{position:relative;margin-bottom:20px}
-.gallery-grid{display:grid;grid-template-columns:3fr 2fr;grid-template-rows:210px 210px;gap:4px;border-radius:14px;overflow:hidden;height:424px}
+.gallery-grid{display:grid;grid-template-columns:3fr 2fr;grid-template-rows:210px 210px;gap:4px;border-radius:18px;overflow:hidden;height:424px;box-shadow:0 14px 32px rgba(15,23,42,.09)}
 .gallery-main{grid-column:1;grid-row:1/3;position:relative;overflow:hidden;cursor:pointer;background:#ddd}
 .gallery-main img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .35s}
 .gallery-main:hover img{transform:scale(1.03)}
@@ -23,31 +45,17 @@ body{font-family:'Inter',sans-serif;background:#f5f5f5;color:#404041;-webkit-fon
 .gallery-small img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .35s}
 .gallery-small:hover img{transform:scale(1.06)}
 .gallery-small-empty{background:#e8e8e8;cursor:default}
-.gallery-more-overlay{position:absolute;inset:0;background:rgba(0,0,0,.48);display:flex;align-items:center;justify-content:center;color:#fff;font-size:17px;font-weight:700;letter-spacing:.01em;pointer-events:none}
-.gallery-btn-all{position:absolute;bottom:14px;right:14px;background:rgba(255,255,255,.95);border:1.5px solid #ccc;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;color:#333;cursor:pointer;transition:background .2s,box-shadow .2s;box-shadow:0 2px 6px rgba(0,0,0,.12);font-family:inherit}
+.gallery-more-overlay{position:absolute;inset:0;background:rgba(0,0,0,.48);display:flex;align-items:flex-end;justify-content:flex-start;color:#fff;font-size:16px;font-weight:700;padding:14px;letter-spacing:.01em;pointer-events:none}
+.gallery-btn-all{position:absolute;bottom:14px;right:14px;background:rgba(255,255,255,.95);border:1.5px solid #ccc;border-radius:999px;padding:10px 16px;font-size:13px;font-weight:600;color:#333;cursor:pointer;transition:background .2s,box-shadow .2s;box-shadow:0 2px 6px rgba(0,0,0,.12);font-family:inherit}
 .gallery-btn-all:hover{background:#fff;box-shadow:0 3px 10px rgba(0,0,0,.18)}
-@media(max-width:640px){
-  .gallery-grid{grid-template-columns:1fr;grid-template-rows:260px;height:260px}
-  .gallery-main{grid-row:1}
-  .gallery-smalls{display:none}
-}
-
-/* ── Layout ──────────────────────────────────── */
+@media(max-width:640px){.gallery-grid{grid-template-columns:1fr;grid-template-rows:minmax(340px,58vh);height:min(58vh,440px)}.gallery-main{grid-row:1}.gallery-main img{object-fit:cover;object-position:center}.gallery-smalls{display:none}}
 .layout{display:grid;grid-template-columns:2fr 1fr;gap:20px;align-items:start}
-@media(max-width:768px){
-  .layout{display:block}
-  .sidebar{margin-top:16px}
-  .details-grid{grid-template-columns:repeat(2,1fr)!important}
-}
-
-/* ── Details grid ─────────────────────────────── */
+@media(max-width:768px){.layout{display:block}.sidebar{margin-top:16px}.details-grid{grid-template-columns:repeat(2,1fr)!important}}
 .details-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;text-align:center}
 .detail-item{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 4px}
 .detail-icon{width:32px;height:32px;color:#003DA5}
 .detail-icon svg{width:32px;height:32px}
 .detail-label{font-size:13px;font-weight:600;color:#333;line-height:1.3}
-
-/* ── Description ──────────────────────────────── */
 .desc-text{font-size:14px;color:#505050;line-height:1.8;position:relative;overflow:hidden}
 .desc-text p{margin-bottom:14px;white-space:pre-line}
 .desc-text.collapsed{max-height:420px}
@@ -55,45 +63,65 @@ body{font-family:'Inter',sans-serif;background:#f5f5f5;color:#404041;-webkit-fon
 .desc-text:not(.collapsed) .desc-fade{display:none}
 .desc-toggle{display:inline-block;margin-top:10px;font-size:13px;font-weight:600;color:#003DA5;cursor:pointer;border:none;background:none;padding:0}
 .desc-toggle:hover{text-decoration:underline}
-
-/* ── Fullscreen Modal ─────────────────────────── */
-.modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:9999;flex-direction:column;align-items:center;justify-content:center}
+.map-wrap{overflow:hidden;padding:0}
+.map-head{padding:24px 24px 16px}
+.map-frame-wrap{min-height:320px;border-top:1px solid #e8edf5;border-bottom:1px solid #e8edf5;background:#dfe6ef}
+.map-frame{display:block;width:100%;min-height:320px;height:100%;border:0}
+.map-foot{padding:16px 24px 24px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.map-address{font-size:14px;color:#576173;line-height:1.6}
+.map-link{font-size:13px;font-weight:700;color:#003DA5;text-decoration:none}
+.modal{display:none;position:fixed;inset:0;background:rgba(8,12,20,.95);z-index:9999;flex-direction:column;align-items:center;justify-content:center;padding:18px}
 .modal.open{display:flex}
 .modal-close{position:fixed;top:16px;right:20px;background:rgba(255,255,255,.12);border:none;color:white;font-size:28px;width:44px;height:44px;border-radius:50%;cursor:pointer;z-index:10001;display:flex;align-items:center;justify-content:center;transition:background .2s;backdrop-filter:blur(4px)}
 .modal-close:hover{background:rgba(255,255,255,.22)}
-.modal-nav{position:fixed;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.14);border:none;color:white;font-size:32px;width:52px;height:52px;border-radius:50%;cursor:pointer;z-index:10001;backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;transition:background .2s;line-height:1}
+.modal-shell{width:min(100%,1180px);display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:14px;align-items:center}
+.modal-nav{background:rgba(255,255,255,.14);border:none;color:white;font-size:32px;width:52px;height:52px;border-radius:50%;cursor:pointer;z-index:10001;backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;transition:background .2s,opacity .2s;line-height:1}
 .modal-nav:hover{background:rgba(255,255,255,.26)}
-.modal-nav.prev{left:16px}
-.modal-nav.next{right:16px}
-.modal-img-wrap{display:flex;align-items:center;justify-content:center;width:100%;flex:1;min-height:0;padding:10px 70px}
-#modal-img{max-width:100%;max-height:88vh;object-fit:contain;border-radius:6px;display:block}
-.modal-counter{color:rgba(255,255,255,.85);font-size:14px;font-weight:600;padding:8px 0 2px;letter-spacing:.04em;flex-shrink:0}
-.modal-strip{display:flex;gap:6px;padding:0 4px 10px;overflow-x:auto;max-width:92vw;scrollbar-width:none;flex-shrink:0}
+.modal-nav[disabled]{opacity:.35;cursor:not-allowed}
+.modal-stage{position:relative;width:100%;min-height:min(68vh,760px);max-height:76vh;display:flex;align-items:center;justify-content:center;overflow:hidden;border-radius:18px;background:rgba(255,255,255,.05);touch-action:none;user-select:none}
+.modal-zoom-layer{display:flex;align-items:center;justify-content:center;width:100%;height:100%;transform-origin:center center;will-change:transform;transition:transform .18s ease}
+.modal-zoom-layer.is-interacting{transition:none}
+#modal-img{max-width:100%;max-height:76vh;object-fit:contain;border-radius:10px;display:block;pointer-events:none;user-select:none;-webkit-user-drag:none}
+.modal-toolbar{width:min(100%,1180px);display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px}
+.modal-counter{color:rgba(255,255,255,.85);font-size:14px;font-weight:600;letter-spacing:.04em;flex-shrink:0}
+.modal-tools{display:flex;align-items:center;gap:10px}.modal-hint{font-size:12px;color:rgba(255,255,255,.68)}
+.modal-tool-btn{border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.08);color:#fff;border-radius:999px;padding:8px 12px;font-size:12px;font-weight:700;cursor:pointer}
+.modal-tool-btn[disabled]{opacity:.45;cursor:not-allowed}
+.modal-strip{display:flex;gap:6px;padding:12px 4px 0;overflow-x:auto;max-width:min(100%,1180px);scrollbar-width:none;flex-shrink:0}
 .modal-strip::-webkit-scrollbar{display:none}
 .modal-thumb{width:64px;height:46px;border-radius:5px;object-fit:cover;cursor:pointer;opacity:.5;border:2px solid transparent;flex-shrink:0;transition:opacity .2s,border-color .2s}
 .modal-thumb.active{opacity:1;border-color:#fff}
 .modal-thumb:hover{opacity:.85}
+@media(max-width:640px){.modal{padding:14px 10px 16px}.modal-shell{grid-template-columns:1fr}.modal-nav{position:fixed;top:50%;transform:translateY(-50%);width:46px;height:46px;font-size:28px}.modal-nav.prev{left:8px}.modal-nav.next{right:8px}.modal-stage{min-height:64vh;max-height:72vh}#modal-img{width:100%;max-width:100%;max-height:72vh}.modal-toolbar{flex-direction:column;align-items:flex-start}.modal-strip{gap:8px;max-width:100vw;padding:10px 0 0}.modal-thumb{width:72px;height:52px}.map-frame-wrap,.map-frame{min-height:280px}}
 </style>
 </head>
 <body>
+<header class="brand-header">
+  <div class="brand-inner">
+    <div class="brand-lockup">
+      <div class="brand-mark">F</div>
+      <div>
+        <div class="brand-name">Fichai</div>
+        <div class="brand-sub">Ficha inmobiliaria</div>
+      </div>
+    </div>
+  </div>
+</header>
 <div class="ct">
-  <!-- Title & Price -->
-  <div style="margin-bottom:20px">
+  <div class="card" style="margin-bottom:20px">
+    <p class="section-label">Detalle de propiedad</p>
     <h1 style="font-size:clamp(20px,4vw,28px);font-weight:800;color:#1A3668;line-height:1.2;margin-bottom:6px">{{ prop.titulo }}</h1>
     <p style="font-size:13px;color:#949CA1;margin-bottom:10px">{{ prop.ubicacion }}</p>
     <p class="gp" style="font-size:clamp(22px,4vw,30px);font-weight:800">{{ prop.precio }}</p>
   </div>
 
-  <!-- Gallery Grid: 1 large + 4 small -->
   <div class="gallery-wrap">
     <div class="gallery-grid">
-      <!-- Main large photo -->
       <div class="gallery-main" onclick="openModal(0)">
         {% if images %}
         <img src="{{ images[0] }}" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22400%22 height=%22300%22><rect fill=%22%23ddd%22 width=%22400%22 height=%22300%22/></svg>'" alt="Foto 1">
         {% endif %}
       </div>
-      <!-- 2×2 small photos -->
       <div class="gallery-smalls">
         {% for i in range(1, 5) %}
         {% if i < images|length %}
@@ -116,254 +144,160 @@ body{font-family:'Inter',sans-serif;background:#f5f5f5;color:#404041;-webkit-fon
     {% endif %}
   </div>
 
-  <!-- Main Layout: 2fr / 1fr -->
   <div class="layout">
     <div>
-      <!-- Detalles de la propiedad -->
       {% if detalles.ambientes or detalles.banos or detalles.metros_totales or detalles.metros_cubiertos or detalles.dormitorios %}
       <div class="card" style="margin-bottom:16px">
         <p style="font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#949CA1;margin-bottom:16px">Detalles de la propiedad</p>
         <div class="details-grid">
           {% if detalles.ambientes %}
-          <div class="detail-item">
-            <div class="detail-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-            </div>
-            <span class="detail-label">{{ detalles.ambientes }} amb.</span>
-          </div>
+          <div class="detail-item"><div class="detail-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div><span class="detail-label">{{ detalles.ambientes }} amb.</span></div>
           {% endif %}
           {% if detalles.dormitorios %}
-          <div class="detail-item">
-            <div class="detail-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4v16"/><path d="M2 8h18a2 2 0 0 1 2 2v10"/><path d="M2 17h20"/><path d="M6 8v9"/></svg>
-            </div>
-            <span class="detail-label">{{ detalles.dormitorios }} dorm.</span>
-          </div>
+          <div class="detail-item"><div class="detail-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4v16"/><path d="M2 8h18a2 2 0 0 1 2 2v10"/><path d="M2 17h20"/><path d="M6 8v9"/></svg></div><span class="detail-label">{{ detalles.dormitorios }} dorm.</span></div>
           {% endif %}
           {% if detalles.banos %}
-          <div class="detail-item">
-            <div class="detail-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h16a1 1 0 0 1 1 1v3a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4v-3a1 1 0 0 1 1-1z"/><path d="M6 12V5a2 2 0 0 1 2-2h3v2.25"/><circle cx="12" cy="7" r="1"/></svg>
-            </div>
-            <span class="detail-label">{{ detalles.banos }} baños</span>
-          </div>
+          <div class="detail-item"><div class="detail-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h16a1 1 0 0 1 1 1v3a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4v-3a1 1 0 0 1 1-1z"/><path d="M6 12V5a2 2 0 0 1 2-2h3v2.25"/><circle cx="12" cy="7" r="1"/></svg></div><span class="detail-label">{{ detalles.banos }} banos</span></div>
           {% endif %}
           {% if detalles.metros_totales %}
-          <div class="detail-item">
-            <div class="detail-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 3v18"/></svg>
-            </div>
-            <span class="detail-label">{{ detalles.metros_totales }} m² tot.</span>
-          </div>
+          <div class="detail-item"><div class="detail-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 3v18"/></svg></div><span class="detail-label">{{ detalles.metros_totales }} m&sup2; tot.</span></div>
           {% endif %}
           {% if detalles.metros_cubiertos %}
-          <div class="detail-item">
-            <div class="detail-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 15h18"/><path d="M15 3v18"/></svg>
-            </div>
-            <span class="detail-label">{{ detalles.metros_cubiertos }} m² cub.</span>
-          </div>
+          <div class="detail-item"><div class="detail-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 15h18"/><path d="M15 3v18"/></svg></div><span class="detail-label">{{ detalles.metros_cubiertos }} m&sup2; cub.</span></div>
           {% endif %}
           {% if detalles.cocheras %}
-          <div class="detail-item">
-            <div class="detail-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17h14M5 17a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h1l1.5-3h9L18 7h1a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2M5 17a2 2 0 0 0-2 2v1h18v-1a2 2 0 0 0-2-2"/><circle cx="7.5" cy="13" r="1.5"/><circle cx="16.5" cy="13" r="1.5"/></svg>
-            </div>
-            <span class="detail-label">{{ detalles.cocheras }} coch.</span>
-          </div>
+          <div class="detail-item"><div class="detail-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17h14M5 17a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h1l1.5-3h9L18 7h1a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2M5 17a2 2 0 0 0-2 2v1h18v-1a2 2 0 0 0-2-2"/><circle cx="7.5" cy="13" r="1.5"/><circle cx="16.5" cy="13" r="1.5"/></svg></div><span class="detail-label">{{ detalles.cocheras }} coch.</span></div>
           {% endif %}
           {% if detalles.antiguedad %}
-          <div class="detail-item">
-            <div class="detail-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-            </div>
-            <span class="detail-label">{{ detalles.antiguedad }} años</span>
-          </div>
+          <div class="detail-item"><div class="detail-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div><span class="detail-label">{{ detalles.antiguedad }} anos</span></div>
           {% endif %}
           {% if detalles.disposicion %}
-          <div class="detail-item">
-            <div class="detail-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
-            </div>
-            <span class="detail-label">{{ detalles.disposicion }}</span>
-          </div>
+          <div class="detail-item"><div class="detail-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg></div><span class="detail-label">{{ detalles.disposicion }}</span></div>
           {% endif %}
           {% if detalles.orientacion %}
-          <div class="detail-item">
-            <div class="detail-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-            </div>
-            <span class="detail-label">{{ detalles.orientacion }}</span>
-          </div>
+          <div class="detail-item"><div class="detail-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></div><span class="detail-label">{{ detalles.orientacion }}</span></div>
           {% endif %}
           {% if detalles.luminosidad %}
-          <div class="detail-item">
-            <div class="detail-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-            </div>
-            <span class="detail-label">{{ detalles.luminosidad }}</span>
-          </div>
+          <div class="detail-item"><div class="detail-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></div><span class="detail-label">{{ detalles.luminosidad }}</span></div>
           {% endif %}
         </div>
       </div>
       {% endif %}
 
-      <!-- Descripción -->
       <div class="card" style="margin-bottom:16px">
-        <p style="font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#949CA1;margin-bottom:14px">Descripción</p>
+        <p style="font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#949CA1;margin-bottom:14px">Descripcion</p>
         <div class="desc-text collapsed" id="desc-text">
           {% for p in descripcion_parts %}
           <p>{{ p }}</p>
           {% endfor %}
           <div class="desc-fade" id="desc-fade"></div>
         </div>
-        <button class="desc-toggle" id="desc-toggle" onclick="toggleDesc()">Mostrar más</button>
+        <button class="desc-toggle" id="desc-toggle" onclick="toggleDesc()">Mostrar mas</button>
       </div>
+      {% if map_embed_url %}
+      <div class="card map-wrap" style="margin-bottom:16px">
+        <div class="map-head">
+          <p class="section-label">Ubicacion</p>
+          <h2 style="font-size:24px;font-weight:800;color:#1A3668;line-height:1.2;margin-bottom:8px">Donde esta la propiedad</h2>
+          <p style="font-size:14px;color:#6b7280;line-height:1.7">Vista de referencia para ubicar la propiedad de forma rapida y clara.</p>
+        </div>
+        <div class="map-frame-wrap">
+          <iframe class="map-frame" src="{{ map_embed_url }}" loading="lazy" referrerpolicy="no-referrer-when-downgrade" allowfullscreen title="Mapa de la propiedad"></iframe>
+        </div>
+        <div class="map-foot">
+          <div class="map-address">{{ map_location_label }}</div>
+          {% if maps_url %}
+          <a class="map-link" href="{{ maps_url }}" target="_blank" rel="noopener noreferrer">Abrir en Google Maps</a>
+          {% endif %}
+        </div>
+      </div>
+      {% endif %}
     </div>
 
-    <!-- Sidebar -->
     <div class="sidebar">
-      <div class="card" style="border-top:4px solid #DC1C2E;text-align:center;position:sticky;top:16px">
+      <div class="card" style="border-top:4px solid #DC1C2E;text-align:center;position:sticky;top:88px">
         <p style="font-size:10px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:#949CA1;margin-bottom:8px">Precio</p>
         <p class="gp" style="font-size:26px;font-weight:800;margin-bottom:16px">{{ prop.precio }}</p>
         <div style="height:1px;background:#f0f0f0;margin-bottom:16px"></div>
         <div style="width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg,#003DA5,#DC1C2E);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:white;margin:0 auto 10px">{{ inicial }}</div>
         <p style="font-weight:700;font-size:14px;color:#1A3668">{{ prop.agent_name }}</p>
         <p style="font-size:10px;color:#DC1C2E;font-weight:600;text-transform:uppercase;letter-spacing:.08em;margin-bottom:16px">Asesor Inmobiliario</p>
-        <a href="https://wa.me/{{ prop.agent_whatsapp }}?text={{ wa_msg }}" target="_blank"
-           style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;background:#25D366;color:white;padding:13px;border-radius:10px;font-weight:700;font-size:14px;text-decoration:none;margin-bottom:2px">
-          Consultar
-        </a>
+        <a href="https://wa.me/{{ prop.agent_whatsapp }}?text={{ wa_msg }}" target="_blank" style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;background:#25D366;color:white;padding:13px;border-radius:10px;font-weight:700;font-size:14px;text-decoration:none;margin-bottom:2px">Consultar</a>
         {% if survey_url %}
-        <a href="{{ survey_url }}" target="_blank"
-           style="display:block;width:100%;text-align:center;padding:12px;border-radius:10px;font-size:13px;font-weight:600;background:#f0f4ff;color:#1A3668;border:1.5px solid #003DA5;text-decoration:none;margin-top:10px">
-          Ya visitaste la propiedad?
-        </a>
+        <a href="{{ survey_url }}" target="_blank" style="display:block;width:100%;text-align:center;padding:12px;border-radius:10px;font-size:13px;font-weight:600;background:#f0f4ff;color:#1A3668;border:1.5px solid #003DA5;text-decoration:none;margin-top:10px">Ya visitaste la propiedad?</a>
         {% endif %}
-
-        {% if prop.info_adicional.expensas %}
-        <div style="margin-top:14px">
-          <div style="display:flex;justify-content:space-between;padding:10px 0;border-top:1px solid #f0f0f0">
-            <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:#949CA1">Expensas</span>
-            <span style="font-size:12px;font-weight:700;color:#404041">{{ prop.info_adicional.expensas }}</span>
-          </div>
-        </div>
+        {% if info_adicional.expensas %}
+        <div style="margin-top:14px"><div style="display:flex;justify-content:space-between;padding:10px 0;border-top:1px solid #f0f0f0"><span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:#949CA1">Expensas</span><span style="font-size:12px;font-weight:700;color:#404041">{{ info_adicional.expensas }}</span></div></div>
         {% endif %}
       </div>
     </div>
   </div>
 
-  <!-- Footer -->
   <div style="margin-top:40px;padding-top:24px;border-top:1px solid #e5e7eb">
     <div style="background:#f9f9f9;border:1px solid #e0e0e0;border-radius:10px;padding:18px 22px;margin-bottom:18px">
       <p style="font-size:12px;font-weight:700;color:#404041;margin-bottom:8px">Aviso importante:</p>
       <p style="font-size:12px;color:#666;line-height:1.7">La siguiente informacion se proporciona con fines orientativos para personas en busqueda de inmuebles. Las descripciones, imagenes y datos aqui presentados provienen de terceros y podrian corresponder a una propiedad comercializada por otra inmobiliaria.<br><br>Se recomienda confirmar todos los detalles con la inmobiliaria responsable de la operacion.<br>La disponibilidad de la unidad esta sujeta a cambios sin previo aviso, al igual que su precio. Las superficies, medidas, expensas y servicios mencionados son aproximados y pueden sufrir modificaciones.<br>Las fotografias y videos tienen caracter ilustrativo y no contractual.</p>
     </div>
-    <p style="text-align:center;font-size:11px;color:#bbb">Ficha creada por <strong style="color:#949CA1">FichasIA</strong></p>
+    <p style="text-align:center;font-size:11px;color:#bbb">Ficha creada por <strong style="color:#949CA1">Fichai</strong></p>
   </div>
 </div>
 
-<!-- Fullscreen Modal -->
 <div id="modal" class="modal" onclick="if(event.target===this||event.target.id==='modal')closeModal()">
   <button class="modal-close" onclick="closeModal()" title="Cerrar">&times;</button>
-  <button class="modal-nav prev" id="btn-prev" onclick="event.stopPropagation();modalNav(-1)">&#8249;</button>
-  <button class="modal-nav next" id="btn-next" onclick="event.stopPropagation();modalNav(1)">&#8250;</button>
-  <div class="modal-img-wrap" onclick="event.stopPropagation()">
-    <img id="modal-img" src="" alt="Foto">
+  <div class="modal-shell" onclick="event.stopPropagation()">
+    <button class="modal-nav prev" id="btn-prev" onclick="modalNav(-1)">&#8249;</button>
+    <div class="modal-stage" id="modal-stage">
+      <div class="modal-zoom-layer" id="modal-zoom-layer">
+        <img id="modal-img" src="" alt="Foto">
+      </div>
+    </div>
+    <button class="modal-nav next" id="btn-next" onclick="modalNav(1)">&#8250;</button>
   </div>
-  <div class="modal-counter" id="photo-counter"></div>
+  <div class="modal-toolbar" onclick="event.stopPropagation()">
+    <div class="modal-counter" id="photo-counter"></div>
+    <div class="modal-tools">
+      <div class="modal-hint">Swipe de un dedo para navegar. Dos dedos solo para zoom.</div>
+      <button class="modal-tool-btn" id="btn-reset-zoom" type="button" onclick="resetZoom()" disabled>Restablecer zoom</button>
+    </div>
+  </div>
   <div class="modal-strip" id="modal-strip" onclick="event.stopPropagation()"></div>
 </div>
 
 <script>
 var IMAGES = {{ images|tojson }};
-var modalIdx = 0;
-var total = IMAGES.length;
-
-/* ── Build modal thumbnail strip ── */
-(function(){
-  var strip = document.getElementById('modal-strip');
-  IMAGES.forEach(function(src, i){
-    var img = document.createElement('img');
-    img.src = src;
-    img.className = 'modal-thumb' + (i===0?' active':'');
-    img.alt = 'Foto '+(i+1);
-    img.onerror = function(){ this.style.display='none'; };
-    img.onclick = function(){ openModal(i); };
-    strip.appendChild(img);
-  });
-})();
-
-/* ── Modal ── */
-function openModal(i){
-  modalIdx = i;
-  updateModal();
-  document.getElementById('modal').classList.add('open');
-  document.body.style.overflow = 'hidden';
-}
-function updateModal(){
-  document.getElementById('modal-img').src = IMAGES[modalIdx] || '';
-  document.getElementById('photo-counter').textContent = (modalIdx+1) + ' / ' + total;
-  document.getElementById('btn-prev').style.visibility = modalIdx > 0 ? 'visible' : 'hidden';
-  document.getElementById('btn-next').style.visibility = modalIdx < total-1 ? 'visible' : 'hidden';
-  /* sync thumbnail strip */
-  var thumbs = document.querySelectorAll('.modal-thumb');
-  thumbs.forEach(function(t,i){ t.classList.toggle('active', i===modalIdx); });
-  if(thumbs[modalIdx]) thumbs[modalIdx].scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'});
-}
-function modalNav(dir){
-  var next = modalIdx + dir;
-  if(next >= 0 && next < total){ modalIdx = next; updateModal(); }
-}
-function closeModal(){
-  document.getElementById('modal').classList.remove('open');
-  document.body.style.overflow = '';
-}
-
-/* ── Keyboard ── */
-document.addEventListener('keydown', function(e){
-  if(!document.getElementById('modal').classList.contains('open')) return;
-  if(e.key==='Escape') closeModal();
-  if(e.key==='ArrowLeft') modalNav(-1);
-  if(e.key==='ArrowRight') modalNav(1);
-});
-
-/* ── Touch swipe en modal ── */
-(function(){
-  var modal = document.getElementById('modal');
-  var startX = 0;
-  modal.addEventListener('touchstart', function(e){ startX = e.touches[0].clientX; }, {passive:true});
-  modal.addEventListener('touchend', function(e){
-    var diff = startX - e.changedTouches[0].clientX;
-    if(Math.abs(diff) > 50) modalNav(diff > 0 ? 1 : -1);
-  });
-})();
-
-/* ── Description toggle ── */
-function toggleDesc(){
-  var el = document.getElementById('desc-text');
-  var btn = document.getElementById('desc-toggle');
-  var fade = document.getElementById('desc-fade');
-  if(el.classList.contains('collapsed')){
-    el.classList.remove('collapsed');
-    btn.textContent = 'Mostrar menos';
-    if(fade) fade.style.display = 'none';
-  } else {
-    el.classList.add('collapsed');
-    btn.textContent = 'Mostrar más';
-    if(fade) fade.style.display = '';
-  }
-}
-(function(){
-  var el = document.getElementById('desc-text');
-  var btn = document.getElementById('desc-toggle');
-  var fade = document.getElementById('desc-fade');
-  if(el && el.scrollHeight <= 420){
-    btn.style.display = 'none';
-    el.classList.remove('collapsed');
-    if(fade) fade.style.display = 'none';
-  }
-})();
+var modalEl = document.getElementById('modal');
+var modalImg = document.getElementById('modal-img');
+var modalStage = document.getElementById('modal-stage');
+var modalZoomLayer = document.getElementById('modal-zoom-layer');
+var modalStrip = document.getElementById('modal-strip');
+var modalCounter = document.getElementById('photo-counter');
+var btnPrev = document.getElementById('btn-prev');
+var btnNext = document.getElementById('btn-next');
+var btnResetZoom = document.getElementById('btn-reset-zoom');
+var viewerState = { currentIndex:0, lastViewedIndex:0, scale:1, panX:0, panY:0, minScale:1, maxScale:4, gesture:null, startX:0, startY:0, startPanX:0, startPanY:0, startScale:1, pinchStartDistance:0, pinchStartMidX:0, pinchStartMidY:0 };
+function clamp(value, min, max){ return Math.min(max, Math.max(min, value)); }
+function getThumbs(){ return modalStrip.querySelectorAll('.modal-thumb'); }
+function buildThumbStrip(){ var fragment = document.createDocumentFragment(); IMAGES.forEach(function(src, i){ var img = document.createElement('img'); img.src = src; img.className = 'modal-thumb' + (i===0?' active':''); img.alt = 'Foto ' + (i+1); img.onerror = function(){ this.style.display='none'; }; img.onclick = function(){ openModal(i); }; fragment.appendChild(img); }); modalStrip.appendChild(fragment); }
+function getPanBounds(){ var rect = modalStage.getBoundingClientRect(); var maxX = Math.max(0, ((rect.width * viewerState.scale) - rect.width) / 2); var maxY = Math.max(0, ((rect.height * viewerState.scale) - rect.height) / 2); return { maxX:maxX, maxY:maxY }; }
+function setInteracting(active){ modalZoomLayer.classList.toggle('is-interacting', !!active); }
+function applyImageTransform(){ var bounds = getPanBounds(); viewerState.panX = clamp(viewerState.panX, -bounds.maxX, bounds.maxX); viewerState.panY = clamp(viewerState.panY, -bounds.maxY, bounds.maxY); modalZoomLayer.style.transform = 'translate(' + viewerState.panX + 'px,' + viewerState.panY + 'px) scale(' + viewerState.scale + ')'; btnResetZoom.disabled = viewerState.scale <= 1.01; }
+function resetZoom(){ viewerState.scale = 1; viewerState.panX = 0; viewerState.panY = 0; viewerState.gesture = null; setInteracting(false); applyImageTransform(); }
+function updateModal(){ var thumbs = getThumbs(); var activeThumb = thumbs[viewerState.currentIndex]; modalImg.src = IMAGES[viewerState.currentIndex] || ''; modalCounter.textContent = (viewerState.currentIndex + 1) + ' / ' + IMAGES.length; btnPrev.disabled = viewerState.currentIndex === 0; btnNext.disabled = viewerState.currentIndex === IMAGES.length - 1; thumbs.forEach(function(thumb, index){ thumb.classList.toggle('active', index === viewerState.currentIndex); }); if(activeThumb) activeThumb.scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'}); applyImageTransform(); }
+function setCurrentSlide(index){ viewerState.currentIndex = clamp(index, 0, Math.max(0, IMAGES.length - 1)); viewerState.lastViewedIndex = viewerState.currentIndex; resetZoom(); updateModal(); }
+function openModal(index){ if(typeof index === 'number') setCurrentSlide(index); else setCurrentSlide(viewerState.lastViewedIndex || 0); modalEl.classList.add('open'); document.body.style.overflow = 'hidden'; }
+function modalNav(dir){ if(viewerState.gesture === 'pinch' || viewerState.scale > 1.01) return; var next = viewerState.currentIndex + dir; if(next >= 0 && next < IMAGES.length) setCurrentSlide(next); }
+function closeModal(){ modalEl.classList.remove('open'); document.body.style.overflow = ''; setInteracting(false); viewerState.gesture = null; }
+function toggleDesc(){ var el = document.getElementById('desc-text'); var btn = document.getElementById('desc-toggle'); var fade = document.getElementById('desc-fade'); if(!el || !btn) return; if(el.classList.contains('collapsed')){ el.classList.remove('collapsed'); btn.textContent = 'Mostrar menos'; if(fade) fade.style.display = 'none'; return; } el.classList.add('collapsed'); btn.textContent = 'Mostrar mas'; if(fade) fade.style.display = ''; }
+function getTouchDistance(touches){ var dx = touches[0].clientX - touches[1].clientX; var dy = touches[0].clientY - touches[1].clientY; return Math.sqrt((dx * dx) + (dy * dy)); }
+function getTouchMidpoint(touches){ return { x:(touches[0].clientX + touches[1].clientX)/2, y:(touches[0].clientY + touches[1].clientY)/2 }; }
+function startSwipeOrPan(touch){ viewerState.startX = touch.clientX; viewerState.startY = touch.clientY; viewerState.startPanX = viewerState.panX; viewerState.startPanY = viewerState.panY; viewerState.gesture = viewerState.scale > 1.01 ? 'pan' : 'swipe'; }
+modalStage.addEventListener('touchstart', function(event){ if(event.touches.length === 2){ var midpoint = getTouchMidpoint(event.touches); viewerState.gesture = 'pinch'; viewerState.startScale = viewerState.scale; viewerState.startPanX = viewerState.panX; viewerState.startPanY = viewerState.panY; viewerState.pinchStartDistance = getTouchDistance(event.touches); viewerState.pinchStartMidX = midpoint.x; viewerState.pinchStartMidY = midpoint.y; setInteracting(true); return; } if(event.touches.length === 1){ startSwipeOrPan(event.touches[0]); setInteracting(viewerState.scale > 1.01); } }, { passive:true });
+modalStage.addEventListener('touchmove', function(event){ if(event.touches.length === 2 && viewerState.gesture === 'pinch'){ event.preventDefault(); var distance = getTouchDistance(event.touches); var midpoint = getTouchMidpoint(event.touches); viewerState.scale = clamp((distance / viewerState.pinchStartDistance) * viewerState.startScale, viewerState.minScale, viewerState.maxScale); viewerState.panX = viewerState.startPanX + (midpoint.x - viewerState.pinchStartMidX); viewerState.panY = viewerState.startPanY + (midpoint.y - viewerState.pinchStartMidY); applyImageTransform(); return; } if(event.touches.length !== 1) return; var touch = event.touches[0]; var deltaX = touch.clientX - viewerState.startX; var deltaY = touch.clientY - viewerState.startY; if(viewerState.scale > 1.01 || viewerState.gesture === 'pan'){ viewerState.gesture = 'pan'; setInteracting(true); event.preventDefault(); viewerState.panX = viewerState.startPanX + deltaX; viewerState.panY = viewerState.startPanY + deltaY; applyImageTransform(); } }, { passive:false });
+modalStage.addEventListener('touchend', function(event){ if(viewerState.gesture === 'pinch'){ if(event.touches.length === 1){ startSwipeOrPan(event.touches[0]); viewerState.gesture = viewerState.scale > 1.01 ? 'pan' : 'swipe'; setInteracting(viewerState.scale > 1.01); return; } viewerState.gesture = null; setInteracting(false); if(viewerState.scale <= 1.01) resetZoom(); return; } if(viewerState.gesture === 'pan'){ if(event.touches.length === 0){ viewerState.gesture = null; setInteracting(false); if(viewerState.scale <= 1.01) resetZoom(); } return; } if(viewerState.gesture === 'swipe' && event.changedTouches.length === 1){ var endTouch = event.changedTouches[0]; var swipeX = endTouch.clientX - viewerState.startX; var swipeY = endTouch.clientY - viewerState.startY; viewerState.gesture = null; if(Math.abs(swipeX) > 48 && Math.abs(swipeX) > Math.abs(swipeY) * 1.2) modalNav(swipeX < 0 ? 1 : -1); } }, { passive:true });
+modalStage.addEventListener('wheel', function(event){ if(!modalEl.classList.contains('open')) return; event.preventDefault(); var zoomDelta = event.deltaY < 0 ? 0.22 : -0.22; viewerState.scale = clamp(viewerState.scale + zoomDelta, viewerState.minScale, viewerState.maxScale); if(viewerState.scale <= 1.01) resetZoom(); else applyImageTransform(); }, { passive:false });
+modalStage.addEventListener('dblclick', function(){ if(viewerState.scale > 1.01) resetZoom(); else { viewerState.scale = 2; applyImageTransform(); } });
+document.addEventListener('keydown', function(event){ if(!modalEl.classList.contains('open')) return; if(event.key==='Escape') closeModal(); if(event.key==='ArrowLeft') modalNav(-1); if(event.key==='ArrowRight') modalNav(1); if(event.key==='0') resetZoom(); });
+(function(){ buildThumbStrip(); updateModal(); var el = document.getElementById('desc-text'); var btn = document.getElementById('desc-toggle'); var fade = document.getElementById('desc-fade'); if(!el || !btn || el.scrollHeight > 420) return; btn.style.display = 'none'; el.classList.remove('collapsed'); if(fade) fade.style.display = 'none'; })();
 </script>
 </body>
 </html>
