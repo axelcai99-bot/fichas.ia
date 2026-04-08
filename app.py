@@ -924,7 +924,7 @@ def public_property(token: str):
     prop = property_repo.find_by_token(token)
     if not prop:
         abort(404)
-    return redirect(url_for("property_detail", property_id=prop["id"]))
+    return property_detail(prop["id"])
 
 
 
