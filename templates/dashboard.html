@@ -647,7 +647,6 @@ body {
                 <option value="nuevo_lead">Nuevo lead</option>
                 <option value="contactado">Contactado</option>
                 <option value="visito_propiedad">Visitó propiedad</option>
-                <option value="negociando">Negociando</option>
                 <option value="cerrado">Cerrado</option>
                 <option value="perdido">Perdido</option>
               </select>
@@ -684,7 +683,6 @@ body {
                 <option value="nuevo_lead">Nuevo lead</option>
                 <option value="contactado">Contactado</option>
                 <option value="visito_propiedad">Visitó propiedad</option>
-                <option value="negociando">Negociando</option>
                 <option value="cerrado">Cerrado</option>
                 <option value="perdido">Perdido</option>
               </select>
@@ -1087,7 +1085,7 @@ async function generarFicha() {
       box.innerHTML = `<div class="result-lbl">Ficha ${resultUrls.length > 1 ? (i + 1) : ''}:</div>
         <a href="${absUrl}" target="_blank" class="result-link">${absUrl}</a>
         <div class="btn-row" style="margin-top:8px">
-          <button class="btn btn-ghost" onclick="copiarLinkFicha(this,'${absUrl}')">📋 Copiar</button>
+          <button class="btn btn-ghost" onclick="copiarLinkResultado(this,'${absUrl}')">📋 Copiar</button>
           <button class="btn btn-green" onclick="abrirWppFicha('${absUrl}')">💬 WhatsApp</button>
         </div>`;
       list.appendChild(box);
@@ -1144,7 +1142,7 @@ function buildAbsolutePropertyUrl(url) {
   }
 }
 
-function copiarLinkFicha(btn, url) {
+function copiarLinkResultado(btn, url) {
   navigator.clipboard.writeText(url).then(() => {
     btn.textContent = '✓ Copiado';
     setTimeout(() => btn.textContent = '📋 Copiar', 2000);
@@ -1338,11 +1336,11 @@ function clientSearchDebounce() {
 /* ── Estado labels & badge classes ─── */
 const ESTADO_LABELS = {
   nuevo_lead:'Nuevo lead', contactado:'Contactado', visito_propiedad:'Visitó propiedad',
-  negociando:'Negociando', cerrado:'Cerrado', perdido:'Perdido'
+  cerrado:'Cerrado', perdido:'Perdido'
 };
 const ESTADO_BADGE = {
   nuevo_lead:'cl-badge-lead', contactado:'cl-badge-contactado', visito_propiedad:'cl-badge-visito',
-  negociando:'cl-badge-negociando', cerrado:'cl-badge-cerrado', perdido:'cl-badge-perdido'
+  cerrado:'cl-badge-cerrado', perdido:'cl-badge-perdido'
 };
 const ACCION_LABELS = {
   llamar:'Llamar', enviar_propiedades:'Enviar propiedades',

@@ -4,6 +4,23 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{{ prop.titulo }}</title>
+
+<!-- Open Graph (preview en WhatsApp, Instagram, etc.) -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="{{ prop.titulo or 'Propiedad' }}">
+<meta property="og:description" content="{{ prop.ubicacion or '' }}{% if prop.precio %} — {{ prop.precio }}{% endif %}">
+{% if images and images|length > 0 %}
+<meta property="og:image" content="{{ images[0] }}">
+{% endif %}
+<meta property="og:site_name" content="{{ prop.agent_name or 'Ficha Inmobiliaria' }}">
+
+<!-- Twitter Card -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{{ prop.titulo or 'Propiedad' }}">
+<meta name="twitter:description" content="{{ prop.ubicacion or '' }}{% if prop.precio %} — {{ prop.precio }}{% endif %}">
+{% if images and images|length > 0 %}
+<meta name="twitter:image" content="{{ images[0] }}">
+{% endif %}
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 *{box-sizing:border-box;margin:0;padding:0}
