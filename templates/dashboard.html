@@ -561,7 +561,7 @@ body {
           <div class="field">
             <span class="field-label">WhatsApp (sin +)</span>
             <input class="input" id="g_whatsapp" type="text"
-                   value="{{ user.whatsapp or '' }}" placeholder="">
+                   value="{{ user.whatsapp or '' }}" placeholder="549" maxlength="15" inputmode="numeric">
           </div>
         </div>
 
@@ -914,11 +914,11 @@ body {
     <div class="modal-title">Nuevo usuario</div>
     <div class="field mb-3">
       <span class="field-label">Nombre completo</span>
-      <input class="input" id="new_nombre" type="text" placeholder="Christian González">
+      <input class="input" id="new_nombre" type="text" placeholder="" autocomplete="off">
     </div>
     <div class="field mb-3">
       <span class="field-label">Usuario (para login)</span>
-      <input class="input" id="new_user" type="text" placeholder="christiang" autocomplete="off">
+      <input class="input" id="new_user" type="text" placeholder="" autocomplete="off">
     </div>
     <div class="field mb-4">
       <span class="field-label">Contraseña inicial</span>

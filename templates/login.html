@@ -207,11 +207,43 @@ input::placeholder { color: #333; }
   border-radius: 0 0 3px 0;
   opacity: .3;
 }
+
+/* Efecto de luz que sigue al mouse */
+.card-glow {
+  position: absolute; inset: 0;
+  border-radius: 4px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .4s;
+  background: radial-gradient(300px circle at var(--mx, 50%) var(--my, 50%),
+    rgba(201,169,110,.08) 0%,
+    rgba(26,58,140,.04) 40%,
+    transparent 70%);
+}
+.card:hover .card-glow { opacity: 1; }
+
+/* Banner de desarrollo */
+.dev-banner {
+  display: flex; gap: 10px; align-items: flex-start;
+  background: rgba(201,169,110,.06);
+  border: 1px solid rgba(201,169,110,.2);
+  border-radius: 3px;
+  padding: 12px 14px;
+  margin-bottom: 20px;
+}
+.dev-banner-icon {
+  font-size: 14px; line-height: 1; flex-shrink: 0; margin-top: 1px;
+}
+.dev-banner-text {
+  font-size: 11.5px; color: #9e8a68; line-height: 1.55; font-weight: 400;
+}
+.dev-banner-text strong { color: var(--gold); font-weight: 500; }
 </style>
 </head>
 <body>
 
-<div class="card">
+<div class="card" id="loginCard">
+  <div class="card-glow" id="cardGlow"></div>
   <div class="corner"></div>
 
   <div class="brand">
@@ -245,11 +277,29 @@ input::placeholder { color: #333; }
     <button type="submit" class="btn-submit">Ingresar →</button>
   </form>
 
+  <div class="dev-banner" style="margin-top:16px;margin-bottom:0">
+    <div class="dev-banner-icon">⚠</div>
+    <div class="dev-banner-text">
+      Esta plataforma está en <strong>desarrollo activo</strong> y puede contener errores.
+      Si encontrás algún problema, por favor comunicalo al administrador.
+    </div>
+  </div>
+
   <div class="card-footer">
     <span>© 2026 FichasIA</span>
     <span class="version">Alpha 0.1</span>
   </div>
 </div>
 
+<script>
+const card = document.getElementById('loginCard');
+card.addEventListener('mousemove', e => {
+  const r = card.getBoundingClientRect();
+  const x = ((e.clientX - r.left) / r.width * 100).toFixed(1) + '%';
+  const y = ((e.clientY - r.top)  / r.height * 100).toFixed(1) + '%';
+  card.style.setProperty('--mx', x);
+  card.style.setProperty('--my', y);
+});
+</script>
 </body>
 </html>
