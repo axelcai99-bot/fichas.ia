@@ -9,7 +9,7 @@ from db import get_connection
 VALID_CLIENT_TYPES = {"depto", "ph", "casa", "lote", "oficina", "otro"}
 VALID_CLIENT_ESTADOS = {
     "nuevo_lead", "contactado", "visito_propiedad",
-    "negociando", "cerrado", "perdido",
+    "cerrado", "perdido",
 }
 VALID_CLIENT_ACCIONES = {
     "", "llamar", "enviar_propiedades", "coordinar_visita", "seguimiento", "esperar_respuesta",
