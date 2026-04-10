@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FichasIA — Plataforma inmobiliaria</title>
+<meta property="og:title" content="FichasIA — Fichas inmobiliarias profesionales">
+<meta property="og:description" content="Generá fichas inmobiliarias profesionales en segundos desde ZonaProp, Argenprop y MercadoLibre.">
+<meta property="og:type" content="website">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600;700&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0a0a;--surface:#111;--surface2:#161616;--border:#1e1e1e;--border2:#2a2a2a;
+  --text:#e8e2d9;--muted:#5a5550;--muted2:#3a3530;
+  --accent:#c9392c;--blue:#1a3a8c;--blue2:#2454c7;--gold:#c9a96e;
+}
+html,body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;font-weight:300;-webkit-font-smoothing:antialiased;min-height:100vh}
+
+/* BG */
+body::before{content:'';position:fixed;inset:0;background:
+  radial-gradient(ellipse 60% 50% at 10% 0%,rgba(201,57,44,.07) 0%,transparent 60%),
+  radial-gradient(ellipse 50% 60% at 90% 100%,rgba(26,58,140,.08) 0%,transparent 60%);
+  pointer-events:none;z-index:0}
+body::after{content:'';position:fixed;inset:0;
+  background-image:linear-gradient(rgba(254,250,215,.015) 1px,transparent 1px),linear-gradient(90deg,rgba(254,250,215,.015) 1px,transparent 1px);
+  background-size:60px 60px;pointer-events:none;z-index:0}
+
+/* LAYOUT */
+.wrap{max-width:1100px;margin:0 auto;padding:0 20px;position:relative;z-index:1}
+
+/* NAV */
+nav{border-bottom:1px solid var(--border);padding:18px 0}
+.nav-inner{display:flex;align-items:center;justify-content:space-between}
+.brand{display:flex;align-items:center;gap:10px;text-decoration:none}
+.brand-icon{width:34px;height:34px;background:#ff7a00;border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:'DM Serif Display',serif;font-size:18px;color:#fff;flex-shrink:0}
+.brand-name{font-family:'DM Serif Display',serif;font-size:20px;color:var(--text);letter-spacing:-.02em}
+.nav-badge{font-size:10px;background:rgba(201,169,110,.12);color:var(--gold);border:1px solid rgba(201,169,110,.25);border-radius:20px;padding:3px 10px;font-weight:500;letter-spacing:.05em}
+
+/* HERO */
+.hero{padding:80px 0 60px;text-align:center}
+.hero-tag{display:inline-block;font-size:11px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--gold);border:1px solid rgba(201,169,110,.25);border-radius:20px;padding:5px 14px;margin-bottom:24px}
+.hero h1{font-family:'DM Serif Display',serif;font-size:clamp(36px,6vw,62px);line-height:1.08;letter-spacing:-.03em;color:var(--text);margin-bottom:20px}
+.hero h1 em{color:var(--gold);font-style:italic}
+.hero p{font-size:17px;color:var(--muted);max-width:560px;margin:0 auto 40px;line-height:1.65;font-weight:300}
+.hero-stats{display:flex;gap:40px;justify-content:center;flex-wrap:wrap;margin-bottom:60px}
+.stat{text-align:center}
+.stat-num{font-family:'DM Serif Display',serif;font-size:36px;color:var(--text);line-height:1}
+.stat-num em{color:var(--gold);font-style:normal}
+.stat-label{font-size:12px;color:var(--muted);margin-top:4px;letter-spacing:.05em;text-transform:uppercase}
+.divider{width:1px;background:var(--border2);height:40px;align-self:center}
+
+/* SECTION */
+.section-label{font-size:11px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--gold);margin-bottom:8px}
+.section-title{font-family:'DM Serif Display',serif;font-size:28px;color:var(--text);margin-bottom:6px;letter-spacing:-.02em}
+.section-sub{font-size:14px;color:var(--muted);margin-bottom:36px}
+
+/* CARDS GRID */
+.cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;margin-bottom:80px}
+.prop-card{background:var(--surface);border:1px solid var(--border2);border-radius:12px;overflow:hidden;transition:transform .2s,border-color .2s,box-shadow .2s;display:flex;flex-direction:column}
+.prop-card:hover{transform:translateY(-3px);border-color:#3a3530;box-shadow:0 16px 40px rgba(0,0,0,.4)}
+.card-img{width:100%;height:190px;object-fit:cover;background:var(--surface2);display:block}
+.card-img-placeholder{width:100%;height:190px;background:linear-gradient(135deg,var(--surface2),var(--muted2));display:flex;align-items:center;justify-content:center;font-size:32px;color:var(--border2)}
+.card-body{padding:18px;flex:1;display:flex;flex-direction:column}
+.card-portal{font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+.card-title{font-size:15px;font-weight:600;color:var(--text);line-height:1.35;margin-bottom:6px;letter-spacing:-.01em}
+.card-price{font-family:'DM Serif Display',serif;font-size:20px;color:var(--gold);margin-bottom:8px}
+.card-location{font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.4}
+.card-details{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.card-detail{font-size:11px;color:var(--muted);background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 8px}
+.card-footer{margin-top:auto;display:flex;gap:8px}
+.btn-ficha{flex:1;background:var(--blue);color:var(--text);border:none;border-radius:8px;padding:11px 16px;font-size:13px;font-weight:500;font-family:'DM Sans',sans-serif;cursor:pointer;text-decoration:none;text-align:center;transition:background .2s;display:block}
+.btn-ficha:hover{background:var(--blue2)}
+.btn-copy{background:var(--surface2);border:1px solid var(--border2);color:var(--muted);border-radius:8px;padding:11px 12px;font-size:13px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:border-color .2s,color .2s;white-space:nowrap}
+.btn-copy:hover{border-color:var(--gold);color:var(--gold)}
+
+/* CRM SECTION */
+.crm-section{border-top:1px solid var(--border);padding:60px 0;margin-bottom:60px}
+.crm-grid{display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:center}
+.crm-features{display:flex;flex-direction:column;gap:16px;margin-top:28px}
+.crm-feature{display:flex;gap:14px;align-items:flex-start}
+.crm-icon{width:36px;height:36px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.crm-feat-title{font-size:14px;font-weight:600;color:var(--text);margin-bottom:2px}
+.crm-feat-desc{font-size:12px;color:var(--muted);line-height:1.5}
+.crm-visual{background:var(--surface);border:1px solid var(--border2);border-radius:12px;padding:20px}
+.pipeline{display:flex;flex-direction:column;gap:8px}
+.pipe-item{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px}
+.pipe-name{font-size:13px;color:var(--text);font-weight:500}
+.pipe-badge{font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;padding:3px 8px;border-radius:20px}
+.badge-lead{background:rgba(201,169,110,.12);color:var(--gold)}
+.badge-contactado{background:rgba(26,58,140,.15);color:#7fa0e8}
+.badge-visita{background:rgba(37,211,102,.1);color:#25d366}
+.badge-cerrado{background:rgba(37,211,102,.2);color:#25d366}
+.badge-perdido{background:rgba(201,57,44,.12);color:#e87a70}
+.pipe-accion{font-size:11px;color:var(--muted)}
+
+/* HOW IT WORKS */
+.how-section{border-top:1px solid var(--border);padding:60px 0;margin-bottom:60px}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;margin-top:36px}
+.step{text-align:center;padding:28px 20px;background:var(--surface);border:1px solid var(--border2);border-radius:12px}
+.step-num{width:40px;height:40px;background:linear-gradient(135deg,var(--accent),var(--blue));border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;margin:0 auto 16px;color:#fff;font-family:'DM Serif Display',serif}
+.step-title{font-size:15px;font-weight:600;color:var(--text);margin-bottom:8px}
+.step-desc{font-size:13px;color:var(--muted);line-height:1.55}
+
+/* FOOTER */
+footer{border-top:1px solid var(--border);padding:28px 0;text-align:center}
+.footer-text{font-size:12px;color:var(--muted)}
+.footer-brand{color:var(--gold);font-weight:500}
+
+/* TOAST */
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(60px);background:var(--surface);border:1px solid var(--border2);color:var(--text);padding:10px 20px;border-radius:8px;font-size:13px;opacity:0;transition:all .3s;z-index:999;pointer-events:none}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+@media(max-width:700px){
+  .hero{padding:50px 0 40px}
+  .crm-grid{grid-template-columns:1fr}
+  .crm-visual{display:none}
+  .steps{grid-template-columns:1fr}
+  .hero-stats{gap:24px}
+  .divider{display:none}
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap nav-inner">
+    <a class="brand" href="/showcase">
+      <div class="brand-icon">F</div>
+      <div class="brand-name">FichasIA</div>
+    </a>
+    <span class="nav-badge">Demo</span>
+  </div>
+</nav>
+
+<div class="wrap">
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="hero-tag">Plataforma inmobiliaria</div>
+    <h1>Fichas profesionales<br>en <em>segundos</em></h1>
+    <p>Pegás el link de ZonaProp, Argenprop o MercadoLibre y obtenés una ficha inmobiliaria lista para compartir por WhatsApp, Instagram o email.</p>
+    <div class="hero-stats">
+      <div class="stat">
+        <div class="stat-num"><em>5</em></div>
+        <div class="stat-label">Fichas de ejemplo</div>
+      </div>
+      <div class="divider"></div>
+      <div class="stat">
+        <div class="stat-num"><em>20</em></div>
+        <div class="stat-label">Clientes de muestra</div>
+      </div>
+      <div class="divider"></div>
+      <div class="stat">
+        <div class="stat-num"><em>30s</em></div>
+        <div class="stat-label">Por ficha</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FICHAS -->
+  <section style="margin-bottom:80px">
+    <div class="section-label">Ejemplos reales</div>
+    <div class="section-title">Fichas generadas por el sistema</div>
+    <div class="section-sub">Cada ficha se genera automáticamente desde el portal inmobiliario. Hacé click en "Ver ficha" para ver el resultado completo.</div>
+
+    <div class="cards-grid">
+      {% for p in props %}
+      <div class="prop-card">
+        {% if p.thumb %}
+        <img class="card-img" src="{{ p.thumb }}" alt="{{ p.titulo }}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+        <div class="card-img-placeholder" style="display:none">🏠</div>
+        {% else %}
+        <div class="card-img-placeholder">🏠</div>
+        {% endif %}
+        <div class="card-body">
+          <div class="card-portal">{{ p.portal }}</div>
+          <div class="card-title">{{ p.titulo }}</div>
+          <div class="card-price">{{ p.precio }}</div>
+          <div class="card-location">{{ p.ubicacion }}</div>
+          <div class="card-details">
+            {% if p.detalles.get('ambientes') %}<span class="card-detail">{{ p.detalles.ambientes }} amb.</span>{% endif %}
+            {% if p.detalles.get('metros_totales') %}<span class="card-detail">{{ p.detalles.metros_totales }}m²</span>{% endif %}
+            {% if p.detalles.get('banos') %}<span class="card-detail">{{ p.detalles.banos }} baños</span>{% endif %}
+          </div>
+          <div class="card-footer">
+            <a class="btn-ficha" href="/p/{{ p.public_token }}" target="_blank">Ver ficha →</a>
+            <button class="btn-copy" onclick="copiar('{{ request.host_url }}p/{{ p.public_token }}', this)">📋</button>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <!-- CRM -->
+  <section class="crm-section">
+    <div class="crm-grid">
+      <div>
+        <div class="section-label">CRM integrado</div>
+        <div class="section-title">Gestioná tus clientes</div>
+        <p style="font-size:14px;color:var(--muted);margin-bottom:4px;line-height:1.65">Un pipeline de seguimiento completo para llevar cada lead desde el primer contacto hasta el cierre.</p>
+        <div class="crm-features">
+          <div class="crm-feature">
+            <div class="crm-icon">📋</div>
+            <div>
+              <div class="crm-feat-title">Pipeline de estados</div>
+              <div class="crm-feat-desc">Nuevo lead → Contactado → Visitó propiedad → Cerrado</div>
+            </div>
+          </div>
+          <div class="crm-feature">
+            <div class="crm-icon">🔔</div>
+            <div>
+              <div class="crm-feat-title">Próximas acciones</div>
+              <div class="crm-feat-desc">Llamar, enviar propiedades, coordinar visita, hacer seguimiento</div>
+            </div>
+          </div>
+          <div class="crm-feature">
+            <div class="crm-icon">🏠</div>
+            <div>
+              <div class="crm-feat-title">Propiedades de interés</div>
+              <div class="crm-feat-desc">Asigná fichas a cada cliente y llevá registro de lo que visitó</div>
+            </div>
+          </div>
+          <div class="crm-feature">
+            <div class="crm-icon">📊</div>
+            <div>
+              <div class="crm-feat-title">Historial de actividad</div>
+              <div class="crm-feat-desc">Registrá cada interacción con el cliente en una línea de tiempo</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="crm-visual">
+        <div style="font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:14px">Clientes activos</div>
+        <div class="pipeline">
+          <div class="pipe-item">
+            <div class="pipe-name">María González</div>
+            <span class="pipe-badge badge-lead">Nuevo lead</span>
+            <div class="pipe-accion">Llamar</div>
+          </div>
+          <div class="pipe-item">
+            <div class="pipe-name">Carlos Rodríguez</div>
+            <span class="pipe-badge badge-contactado">Contactado</span>
+            <div class="pipe-accion">Enviar props</div>
+          </div>
+          <div class="pipe-item">
+            <div class="pipe-name">Ana Martínez</div>
+            <span class="pipe-badge badge-visita">Visitó prop.</span>
+            <div class="pipe-accion">Coordinar</div>
+          </div>
+          <div class="pipe-item">
+            <div class="pipe-name">Tomás Morales</div>
+            <span class="pipe-badge badge-cerrado">Cerrado ✓</span>
+            <div class="pipe-accion">—</div>
+          </div>
+          <div class="pipe-item">
+            <div class="pipe-name">Sofía López</div>
+            <span class="pipe-badge badge-perdido">Perdido</span>
+            <div class="pipe-accion">—</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- HOW IT WORKS -->
+  <section class="how-section">
+    <div style="text-align:center">
+      <div class="section-label">¿Cómo funciona?</div>
+      <div class="section-title">Tres pasos, una ficha</div>
+    </div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-title">Pegás el link</div>
+        <div class="step-desc">Copiás la URL de cualquier propiedad de ZonaProp, Argenprop o MercadoLibre y la pegás en el sistema.</div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-title">El sistema scrapea</div>
+        <div class="step-desc">En menos de 30 segundos extrae título, precio, fotos en alta resolución, detalles y descripción completa.</div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-title">Compartís la ficha</div>
+        <div class="step-desc">Obtenés un link único para compartir por WhatsApp con preview automático de imagen y título.</div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<footer>
+  <div class="footer-text">Desarrollado por <span class="footer-brand">FichasIA</span> · Plataforma inmobiliaria</div>
+</footer>
+
+<div class="toast" id="toast"></div>
+
+<script>
+function copiar(url, btn) {
+  navigator.clipboard.writeText(url).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = '✓';
+    setTimeout(() => btn.textContent = orig, 2000);
+    const t = document.getElementById('toast');
+    t.textContent = 'Link copiado';
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2000);
+  });
+}
+</script>
+</body>
+</html>

@@ -603,7 +603,7 @@ body {
           </div>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
             <button class="btn btn-danger" style="padding:8px 12px" onclick="eliminarTodasPropiedadesActivas()">Borrar todo</button>
-            <button class="btn btn-ghost" style="padding:8px 12px" onclick="cargarPropiedadesActivas()">Recargar</button>
+            <button class="btn btn-ghost" style="padding:8px 12px" onclick="this.textContent='↻ Actualizando…';cargarPropiedadesActivas().finally(()=>this.textContent='↻ Actualizar')">↻ Actualizar</button>
           </div>
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
@@ -1236,13 +1236,12 @@ async function cargarPropiedadesActivas(page) {
       renderPropPagination();
       return;
     }
-    const startNum = propTotal - ((propPage - 1) * propPerPage);
     tbody.innerHTML = props.map((p, idx) => {
       const date = new Date(p.created_at);
       const dateLabel = isNaN(date.getTime()) ? '-' : date.toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' });
       return `
         <tr>
-          <td>${startNum - idx}</td>
+          <td>${p.user_seq || (idx + 1)}</td>
           <td><a href="/propiedad/${p.id}" target="_blank" style="color:var(--blue-text);text-decoration:none">${p.titulo || 'Sin título'}</a></td>
           <td>${p.precio || '-'}</td>
           <td>${p.ubicacion || '-'}</td>
