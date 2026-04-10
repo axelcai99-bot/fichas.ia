@@ -934,6 +934,31 @@ def public_property(token: str):
     return property_detail(prop["id"])
 
 
+@app.route("/showcase")
+def showcase():
+    data = property_repo.list_properties(limit=10, owner_username="demo")
+    props = data.get("items", [])
+    # Resolver imagen principal de cada propiedad para las cards
+    showcased = []
+    for p in props:
+        full = property_repo.get_property(p["id"])
+        if not full:
+            continue
+        images = _resolve_property_images(full)
+        showcased.append({
+            "id": full["id"],
+            "titulo": full["titulo"],
+            "precio": full["precio"],
+            "ubicacion": full["ubicacion"],
+            "public_token": full["public_token"],
+            "portal": full.get("source_portal", "zonaprop"),
+            "thumb": images[0] if images else "",
+            "n_fotos": len(images),
+            "detalles": full.get("detalles", {}),
+        })
+    return render_template("showcase.html", props=showcased)
+
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
